@@ -1,5 +1,5 @@
 ---
-layout: "post"
+layout: post
 title: "Implementing Dijkstra"
 date: "2018-05-01 14:54"
 ---
