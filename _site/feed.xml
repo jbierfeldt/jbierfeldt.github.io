@@ -1,12 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.3">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2018-05-01T15:57:02+02:00</updated><id>http://localhost:4000/</id><title type="html">Jackson Bierfeldt Developer Blog</title><subtitle>Developer blog for Jackson Bierfeldt. Posts about current projects, ideas, and unanswered questions.</subtitle><entry><title type="html">Implementing Dijkstra</title><link href="http://localhost:4000/2018/05/01/implementing-dijkstra.html" rel="alternate" type="text/html" title="Implementing Dijkstra" /><published>2018-05-01T14:54:00+02:00</published><updated>2018-05-01T14:54:00+02:00</updated><id>http://localhost:4000/2018/05/01/implementing-dijkstra</id><content type="html" xml:base="http://localhost:4000/2018/05/01/implementing-dijkstra.html">&lt;h1 id=&quot;using-dijkstras-algorithm-for-score-calculation-in-a-tile-based-game&quot;&gt;Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game&lt;/h1&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.3">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2018-05-01T16:17:55+02:00</updated><id>http://localhost:4000/</id><title type="html">Jackson Bierfeldt Developer Blog</title><subtitle>Developer blog for Jackson Bierfeldt. Posts about current projects, ideas, and unanswered questions.</subtitle><entry><title type="html">Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game</title><link href="http://localhost:4000/2018/05/01/implementing-dijkstra.html" rel="alternate" type="text/html" title="Using Dijkstra's Algorithm for Score Calculation in a Tile-based Game" /><published>2018-05-01T14:54:00+02:00</published><updated>2018-05-01T14:54:00+02:00</updated><id>http://localhost:4000/2018/05/01/implementing-dijkstra</id><content type="html" xml:base="http://localhost:4000/2018/05/01/implementing-dijkstra.html">&lt;p&gt;Recently, I’ve been building a multiplayer tile-laying game inspired by games like &lt;a href=&quot;https://en.wikipedia.org/wiki/Carcassonne_board_game&quot;&gt;Carcassonne&lt;/a&gt; and &lt;a href=&quot;https://en.wikipedia.org/wiki/Catan&quot;&gt;Settlers of Catan&lt;/a&gt;. I’ll soon have some other blog posts about the game and some of the technologies and architectures I’m building it with, but today I’m going to walkthrough and illustrate how I used &lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&quot;&gt;Dijkstra’s Algorithm&lt;/a&gt; to implement the scoring component of the game. Since there are already &lt;a href=&quot;https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work&quot;&gt;so&lt;/a&gt; &lt;a href=&quot;https://www.youtube.com/watch?v=NHZr6P1csiY&quot;&gt;many&lt;/a&gt; &lt;a href=&quot;https://www.manning.com/books/grokking-algorithms&quot;&gt;good&lt;/a&gt; &lt;a href=&quot;https://mitpress.mit.edu/books/introduction-algorithms&quot;&gt;resources&lt;/a&gt; explaining what Dijkstra’s algorithm is and how it works, I’m writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.&lt;/p&gt;
 
-&lt;p&gt;Recently, I’ve been building a multiplayer tile-laying game inspired by games like &lt;a href=&quot;https://en.wikipedia.org/wiki/Carcassonne_board_game&quot;&gt;Carcassonne&lt;/a&gt; and &lt;a href=&quot;https://en.wikipedia.org/wiki/Catan&quot;&gt;Settlers of Catan&lt;/a&gt;. I’ll soon have some other blog posts about the game and some of the technologies and architectures I’m building it with, but today I’m going to walkthrough and illustrate how I used &lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&quot;&gt;Dijkstra’s Algorithm&lt;/a&gt; to implement the scoring component of the game. Since there are already &lt;a href=&quot;https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work&quot;&gt;so&lt;/a&gt; &lt;a href=&quot;https://www.youtube.com/watch?v=NHZr6P1csiY&quot;&gt;many&lt;/a&gt; &lt;a href=&quot;https://www.manning.com/books/grokking-algorithms&quot;&gt;good&lt;/a&gt; &lt;a href=&quot;https://mitpress.mit.edu/books/introduction-algorithms&quot;&gt;resources&lt;/a&gt; explaining what Dijkstra’s algorithm is and how it works, I’m writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.&lt;/p&gt;
-
-&lt;h3 id=&quot;the-game--rules-and-objectives&quot;&gt;The Game — Rules and Objectives&lt;/h3&gt;
+&lt;h2 id=&quot;the-game--rules-and-objectives&quot;&gt;The Game — Rules and Objectives&lt;/h2&gt;
 
 &lt;p&gt;To begin, I’m going to explain the game, so as to motivate why I even needed a pathfinding algorithm in the first place. If all you want to see is my implementation, feel free to skip to the next section.&lt;/p&gt;
 
-&lt;h5 id=&quot;turns-and-tile-placement&quot;&gt;Turns and Tile Placement&lt;/h5&gt;
+&lt;h3 id=&quot;turns-and-tile-placement&quot;&gt;Turns and Tile Placement&lt;/h3&gt;
 
 &lt;p&gt;Like Carcassonne, the game begins with a single tile on the board. When it is each players’ turn, they draw a random tile and must place it somewhere on the board. In order to place the tile, all of its edges must match with those surrounding it. Streets have to match up to streets, and grass has to match up with grass. Tiles can be rotated but not swapped out. So what a player will do on their turn is largely dependent on what tile they draw.&lt;/p&gt;
 
@@ -14,7 +12,7 @@
 
 &lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/tiletypes2.png&quot; alt=&quot;Tile Types&quot; /&gt;&lt;/p&gt;
 
-&lt;h5 id=&quot;types-of-tiles&quot;&gt;Types of Tiles&lt;/h5&gt;
+&lt;h4 id=&quot;types-of-tiles&quot;&gt;Types of Tiles&lt;/h4&gt;
 
 &lt;p&gt;Tiles can either be a simple road tiles which are used to connect other tiles, or they can be &lt;em&gt;special tiles&lt;/em&gt; which includes one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: &lt;strong&gt;Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.&lt;/strong&gt;&lt;/p&gt;
 
@@ -22,7 +20,7 @@
 
 &lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/completed_path.png&quot; alt=&quot;Board Example&quot; /&gt;&lt;/p&gt;
 
-&lt;h5 id=&quot;scoring-the-game&quot;&gt;Scoring the Game&lt;/h5&gt;
+&lt;h4 id=&quot;scoring-the-game&quot;&gt;Scoring the Game&lt;/h4&gt;
 
 &lt;p&gt;A path is scored whenever it gets &lt;em&gt;completed&lt;/em&gt;, meaning that there is no possibility for other tiles to be added to it: it becomes a closed system. Upon completion, this closed system is analyzed to determine the value of each of the tiles within it according to the following rules:&lt;/p&gt;
 
@@ -36,11 +34,11 @@
 
 &lt;p&gt;But why Dijkstra and not [A&lt;em&gt;](https://en.wikipedia.org/wiki/A&lt;/em&gt;_search_algorithm) or &lt;a href=&quot;https://en.wikipedia.org/wiki/Shortest_path_problem&quot;&gt;other&lt;/a&gt; &lt;a href=&quot;https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm&quot;&gt;popular&lt;/a&gt; &lt;a href=&quot;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&quot;&gt;shortest&lt;/a&gt; &lt;a href=&quot;https://www.geeksforgeeks.org/johnsons-algorithm/&quot;&gt;distance&lt;/a&gt; &lt;a href=&quot;https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm&quot;&gt;algorithms&lt;/a&gt;? I’ll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game.&lt;/p&gt;
 
-&lt;h5 id=&quot;example&quot;&gt;Example&lt;/h5&gt;
+&lt;h3 id=&quot;example&quot;&gt;Example&lt;/h3&gt;
 
 &lt;p&gt;For this example, I am going to take the completed path that I already showed you above and walk through exactly what I want to happen when the values of the tiles are calculated as the game goes through the three rules I outlined above. As we step through the rules, I’ll show illustrations and keep a tally. (For convenience, I’m not going to list the non-special tiles, because their values won’t change after the 1st rule is applied, but keep in mind that they are there.)&lt;/p&gt;
 
-&lt;h6 id=&quot;step-1&quot;&gt;Step 1&lt;/h6&gt;
+&lt;h4 id=&quot;step-1&quot;&gt;Step 1&lt;/h4&gt;
 
 &lt;p&gt;Step 1 is easy. Loop through all of the tiles on the completed path and assign a value of 1. This rewards players who used their tiles to help build and complete the path, even if they aren’t reaping benefits of industry.&lt;/p&gt;
 
@@ -57,7 +55,7 @@
 &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;h6 id=&quot;step-2&quot;&gt;Step 2&lt;/h6&gt;
+&lt;h4 id=&quot;step-2&quot;&gt;Step 2&lt;/h4&gt;
 
 &lt;p&gt;Now we are coming to the pathfinding. We need to find the optimal valid paths from each mine to each factory that it can possibly supply. The following image shows what we would like our pathfinding algorithm to do. The orange lines are leading from the mines to the factories.&lt;/p&gt;
 
@@ -80,7 +78,7 @@
 &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;h6 id=&quot;step-3&quot;&gt;Step 3&lt;/h6&gt;
+&lt;h4 id=&quot;step-3&quot;&gt;Step 3&lt;/h4&gt;
 
 &lt;p&gt;After all of the paths from the mines are calculated and scored, the game then moves on to the factories. Remember, only factories which have been supplied by mines are even eligible for shipping their goods to houses. In our example, however, both factories have been supplied, so both will attempt to draw paths to houses on path. Lucky for Blue, they own both of the factories, and with the 2x multiplier, they should expect a big payout. Let’s see what happens:&lt;/p&gt;
 
@@ -133,7 +131,7 @@
 
 &lt;p&gt;Ok, now that we understand how the game works, what goals we want the algorithm to accomplish, and why I choose Dijkstra’s algorithm to accomplish these goals, we can start to look at the code. Everything is written in Javascript (ECMAScript 2016). (Note: Throughout the post, I’ve hidden a lot of the project-specific implementation details or simplified things in cases where it seemed superfluous or confusing. If you want to see the full code all in one place, you can find it &lt;a href=&quot;/assets/dijkstra/files/pathfinding.js&quot;&gt;here&lt;/a&gt;.)&lt;/p&gt;
 
-&lt;h6 id=&quot;the-nodesonpath-object&quot;&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; Object&lt;/h6&gt;
+&lt;h4 id=&quot;the-nodesonpath-object&quot;&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; Object&lt;/h4&gt;
 
 &lt;p&gt;The first thing to understand is the information the rest of the game provides to the pathfinding/scoring mechanism. Every time a player places a tile and ends their turn, the game checks to see if placed tile is on a completed path. (The specifics of this will be for another blog post.) If that path is completed, the game passes an object containing an array called &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; to the scoring mechanism. This array is populated with objects representing each tile on the completed path. A typical &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; array looks like this:&lt;/p&gt;
 
@@ -175,7 +173,7 @@
 &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;h6 id=&quot;scoring-step-1&quot;&gt;Scoring: Step 1&lt;/h6&gt;
+&lt;h4 id=&quot;scoring-step-1&quot;&gt;Scoring: Step 1&lt;/h4&gt;
 
 &lt;p&gt;Before doing anything related to pathfinding and Dijkstra, the function does a little set-up and sets some initial values. The way that points will be awarded to each player is simple: each tile is given a &lt;code class=&quot;highlighter-rouge&quot;&gt;value&lt;/code&gt; property which is an integer number of points that the player who owns the tile will receive at the end of the scoring calculation. In accordance with Step 1 of our scoring rules, each tile’s default &lt;code class=&quot;highlighter-rouge&quot;&gt;value&lt;/code&gt; property is set to &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt;, so that each tile on the path is automatically worth &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; point.&lt;/p&gt;
 
@@ -240,7 +238,7 @@
 
 &lt;p&gt;It’s the stuff that happens in Steps 2 and 3 of this process which are really of interest to us here in this article, however, so let’s start taking a look at the code which actually implements Dijkstra’s algorithm and assigns value to the special mine, factory, and house tiles.&lt;/p&gt;
 
-&lt;h6 id=&quot;steps-2-and-3-pathfinding&quot;&gt;Steps 2 and 3: Pathfinding&lt;/h6&gt;
+&lt;h4 id=&quot;steps-2-and-3-pathfinding&quot;&gt;Steps 2 and 3: Pathfinding&lt;/h4&gt;
 
 &lt;p&gt;(Note: My implementation of Dijkstra’s algorithm was heavily inspired by that of Stella Chung’s, which she documents in a blogpost &lt;a href=&quot;https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04&quot;&gt;here.&lt;/a&gt;)&lt;/p&gt;
 
@@ -295,7 +293,7 @@
 
 &lt;p&gt;We wrap all of this up into a function called &lt;code class=&quot;highlighter-rouge&quot;&gt;calcSpecialTileBonus&lt;/code&gt; and then call it twice, once with &lt;code class=&quot;highlighter-rouge&quot;&gt;'mine'&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;'factory'&lt;/code&gt; as the startTypes and endTypes, and once with &lt;code class=&quot;highlighter-rouge&quot;&gt;'factory'&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;'house'&lt;/code&gt;. The second time, you’ll notice that we include in the arguments a flag that tells us to check if &lt;code class=&quot;highlighter-rouge&quot;&gt;loaded == true&lt;/code&gt; and the modifier &lt;code class=&quot;highlighter-rouge&quot;&gt;2&lt;/code&gt; for calculating the bonus. It seemed like a good idea to abstract this rather than write it twice because 90% of the code would be shared between the two cases.&lt;/p&gt;
 
-&lt;h6 id=&quot;implementing-dijkstras-algorithm&quot;&gt;Implementing Dijkstra’s Algorithm&lt;/h6&gt;
+&lt;h4 id=&quot;implementing-dijkstras-algorithm&quot;&gt;Implementing Dijkstra’s Algorithm&lt;/h4&gt;
 
 &lt;p&gt;Let’s turn now to the actual implementation of the algorithm and look at both functions &lt;code class=&quot;highlighter-rouge&quot;&gt;getDijkstraTree&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt;, as well as the helper functions which support them.&lt;/p&gt;
 
@@ -446,7 +444,7 @@
 
 &lt;p&gt;If the optimal path returned by &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt; is valid, we then use the length of this path (along with the &lt;code class=&quot;highlighter-rouge&quot;&gt;*2&lt;/code&gt; modifier in the case of factories and houses) to change the value of the special tiles on the completed path, and thus to allow proper score calculation based on the rules we set out to implement.&lt;/p&gt;
 
-&lt;h3 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h3&gt;
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
 
 &lt;p&gt;I hope that you were able to see from this example what it looks like to implement Dijkstra’s (or any other shortest path finding algorithm) in a grid- or tile-based game like the one I’ve been developing as well as some of the design decisions that went into choosing this algorithm. If I were building a more dynamic, performance intensive game like a real-time strategy or tower defense game, I would probably use A* or some version of it.&lt;/p&gt;
 
@@ -454,7 +452,7 @@
 
 &lt;p&gt;If there is anything that I missed or could improve, please reach out to me at &lt;a href=&quot;mailto:jbierfeldt@gmail.com&quot;&gt;jbierfeldt@gmail.com&lt;/a&gt; and let me know!&lt;/p&gt;
 
-&lt;h6 id=&quot;inspiration-and-resources&quot;&gt;Inspiration and Resources:&lt;/h6&gt;
+&lt;h2 id=&quot;inspiration-and-resources&quot;&gt;Inspiration and Resources:&lt;/h2&gt;
 &lt;ul&gt;
   &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&quot;&gt;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/A-star_search_algorithm&quot;&gt;https://en.wikipedia.org/wiki/A-star_search_algorithm&lt;/a&gt;&lt;/li&gt;
@@ -462,4 +460,4 @@
   &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Maze_solving_algorithm&quot;&gt;https://en.wikipedia.org/wiki/Maze_solving_algorithm&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&quot;&gt;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&lt;/a&gt;&lt;/li&gt;
   &lt;li&gt;&lt;a href=&quot;https://mitpress.mit.edu/books/introduction-algorithms&quot;&gt;https://mitpress.mit.edu/books/introduction-algorithms&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;</content><author><name></name></author><summary type="html">Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game</summary></entry></feed>
+&lt;/ul&gt;</content><author><name></name></author><summary type="html">Recently, I’ve been building a multiplayer tile-laying game inspired by games like Carcassonne and Settlers of Catan. I’ll soon have some other blog posts about the game and some of the technologies and architectures I’m building it with, but today I’m going to walkthrough and illustrate how I used Dijkstra’s Algorithm to implement the scoring component of the game. Since there are already so many good resources explaining what Dijkstra’s algorithm is and how it works, I’m writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.</summary></entry></feed>

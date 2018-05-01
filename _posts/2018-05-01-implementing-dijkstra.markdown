@@ -1,18 +1,16 @@
 ---
 layout: post
-title: "Implementing Dijkstra"
+title: "Using Dijkstra's Algorithm for Score Calculation in a Tile-based Game"
 date: "2018-05-01 14:54"
 ---
 
-# Using Dijkstra's Algorithm for Score Calculation in a Tile-based Game
-
 Recently, I've been building a multiplayer tile-laying game inspired by games like [Carcassonne](<https://en.wikipedia.org/wiki/Carcassonne_board_game>) and [Settlers of Catan](https://en.wikipedia.org/wiki/Catan). I'll soon have some other blog posts about the game and some of the technologies and architectures I'm building it with, but today I'm going to walkthrough and illustrate how I used [Dijkstra's Algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) to implement the scoring component of the game. Since there are already [so](https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work) [many](https://www.youtube.com/watch?v=NHZr6P1csiY) [good](https://www.manning.com/books/grokking-algorithms) [resources](https://mitpress.mit.edu/books/introduction-algorithms) explaining what Dijkstra's algorithm is and how it works, I'm writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.
 
-### The Game — Rules and Objectives
+## The Game — Rules and Objectives
 
 To begin, I'm going to explain the game, so as to motivate why I even needed a pathfinding algorithm in the first place. If all you want to see is my implementation, feel free to skip to the next section.
 
-##### Turns and Tile Placement
+### Turns and Tile Placement
 
 Like Carcassonne, the game begins with a single tile on the board. When it is each players' turn, they draw a random tile and must place it somewhere on the board. In order to place the tile, all of its edges must match with those surrounding it. Streets have to match up to streets, and grass has to match up with grass. Tiles can be rotated but not swapped out. So what a player will do on their turn is largely dependent on what tile they draw.
 
@@ -20,7 +18,7 @@ Like Carcassonne, the game begins with a single tile on the board. When it is ea
 
 ![Tile Types](/assets/dijkstra/images/tiletypes2.png)
 
-##### Types of Tiles
+#### Types of Tiles
 
 Tiles can either be a simple road tiles which are used to connect other tiles, or they can be *special tiles* which includes one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: **Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.**
 
@@ -29,7 +27,7 @@ Players *own* the tiles that they place, including any special tiles. This is in
 ![Board Example](/assets/dijkstra/images/completed_path.png)
 
 
-##### Scoring the Game
+#### Scoring the Game
 
 A path is scored whenever it gets *completed*, meaning that there is no possibility for other tiles to be added to it: it becomes a closed system. Upon completion, this closed system is analyzed to determine the value of each of the tiles within it according to the following rules:
 
@@ -43,11 +41,11 @@ But why Dijkstra and not [A*](https://en.wikipedia.org/wiki/A*_search_algorithm)
 
 
 
-##### Example
+### Example
 
 For this example, I am going to take the completed path that I already showed you above and walk through exactly what I want to happen when the values of the tiles are calculated as the game goes through the three rules I outlined above. As we step through the rules, I'll show illustrations and keep a tally. (For convenience, I'm not going to list the non-special tiles, because their values won't change after the 1st rule is applied, but keep in mind that they are there.)
 
-###### Step 1
+#### Step 1
 
 Step 1 is easy. Loop through all of the tiles on the completed path and assign a value of 1. This rewards players who used their tiles to help build and complete the path, even if they aren't reaping benefits of industry.
 
@@ -65,7 +63,7 @@ values = {
 }
 ```
 
-###### Step 2
+#### Step 2
 
 Now we are coming to the pathfinding. We need to find the optimal valid paths from each mine to each factory that it can possibly supply. The following image shows what we would like our pathfinding algorithm to do. The orange lines are leading from the mines to the factories.
 
@@ -89,7 +87,7 @@ values = {
 }
 ```
 
-###### Step 3
+#### Step 3
 
 After all of the paths from the mines are calculated and scored, the game then moves on to the factories. Remember, only factories which have been supplied by mines are even eligible for shipping their goods to houses. In our example, however, both factories have been supplied, so both will attempt to draw paths to houses on path. Lucky for Blue, they own both of the factories, and with the 2x multiplier, they should expect a big payout. Let's see what happens:
 
@@ -142,7 +140,7 @@ In debating between using A\* and Dijkstra, I opted for Dijkstra because I knew 
 
 Ok, now that we understand how the game works, what goals we want the algorithm to accomplish, and why I choose Dijkstra's algorithm to accomplish these goals, we can start to look at the code. Everything is written in Javascript (ECMAScript 2016). (Note: Throughout the post, I've hidden a lot of the project-specific implementation details or simplified things in cases where it seemed superfluous or confusing. If you want to see the full code all in one place, you can find it [here](</assets/dijkstra/files/pathfinding.js>).)
 
-###### The ``nodesOnPath`` Object
+#### The ``nodesOnPath`` Object
 
 The first thing to understand is the information the rest of the game provides to the pathfinding/scoring mechanism. Every time a player places a tile and ends their turn, the game checks to see if placed tile is on a completed path. (The specifics of this will be for another blog post.) If that path is completed, the game passes an object containing an array called ``nodesOnPath`` to the scoring mechanism. This array is populated with objects representing each tile on the completed path. A typical ``nodesOnPath`` array looks like this:
 
@@ -186,7 +184,7 @@ calcCompletedPathScore: function(nodesOnPath) {
 }
 ```
 
-###### Scoring: Step 1
+#### Scoring: Step 1
 
 Before doing anything related to pathfinding and Dijkstra, the function does a little set-up and sets some initial values. The way that points will be awarded to each player is simple: each tile is given a ``value`` property which is an integer number of points that the player who owns the tile will receive at the end of the scoring calculation. In accordance with Step 1 of our scoring rules, each tile's default ``value`` property is set to ``1``, so that each tile on the path is automatically worth ``1`` point.
 
@@ -253,7 +251,7 @@ calcCompletedPathScore: function(nodesOnPath) {
 
 It's the stuff that happens in Steps 2 and 3 of this process which are really of interest to us here in this article, however, so let's start taking a look at the code which actually implements Dijkstra's algorithm and assigns value to the special mine, factory, and house tiles.
 
-###### Steps 2 and 3: Pathfinding
+#### Steps 2 and 3: Pathfinding
 
 (Note: My implementation of Dijkstra's algorithm was heavily inspired by that of Stella Chung's, which she documents in a blogpost [here.](https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04))
 
@@ -309,7 +307,7 @@ For each valid start node, we call a function ``getDijkstraTree`` which will ret
 
 We wrap all of this up into a function called ``calcSpecialTileBonus`` and then call it twice, once with ``'mine'`` and ``'factory'`` as the startTypes and endTypes, and once with ``'factory'`` and ``'house'``. The second time, you'll notice that we include in the arguments a flag that tells us to check if ``loaded == true`` and the modifier ``2`` for calculating the bonus. It seemed like a good idea to abstract this rather than write it twice because 90% of the code would be shared between the two cases.
 
-###### Implementing Dijkstra's Algorithm
+#### Implementing Dijkstra's Algorithm
 
 Let's turn now to the actual implementation of the algorithm and look at both functions ``getDijkstraTree``, ``getOptimalPathFromTree``, as well as the helper functions which support them.
 
@@ -463,7 +461,7 @@ const calcSpecialTileBonus = function(specialTiles, startType, endType, bonusAmo
 
 If the optimal path returned by ``getOptimalPathFromTree`` is valid, we then use the length of this path (along with the ``*2`` modifier in the case of factories and houses) to change the value of the special tiles on the completed path, and thus to allow proper score calculation based on the rules we set out to implement.
 
-### Conclusion
+## Conclusion
 
 I hope that you were able to see from this example what it looks like to implement Dijkstra's (or any other shortest path finding algorithm) in a grid- or tile-based game like the one I've been developing as well as some of the design decisions that went into choosing this algorithm. If I were building a more dynamic, performance intensive game like a real-time strategy or tower defense game, I would probably use A\* or some version of it.
 
@@ -472,7 +470,7 @@ Although I tried to keep my mind bent towards efficiency while building this, I'
 If there is anything that I missed or could improve, please reach out to me at [jbierfeldt@gmail.com](<mailto:jbierfeldt@gmail.com>) and let me know!
 
 
-###### Inspiration and Resources:
+## Inspiration and Resources:
 *   <https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm>
 *   <https://en.wikipedia.org/wiki/A-star_search_algorithm>
 *   <https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04>
