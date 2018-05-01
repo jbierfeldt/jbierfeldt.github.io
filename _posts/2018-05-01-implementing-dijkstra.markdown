@@ -12,7 +12,7 @@ To begin, I'm going to explain the game, so as to motivate why I even needed a p
 
 ### Turns and Tile Placement
 
-Like Carcassonne, the game begins with a single tile on the board. When it is each players' turn, they draw a random tile and must place it somewhere on the board. In order to place the tile, all of its edges must match with those surrounding it. Streets have to match up to streets, and grass has to match up with grass. Tiles can be rotated but not swapped out. So what a player will do on their turn is largely dependent on what tile they draw.
+Like Carcassonne, the game begins with a single tile on the board. When it is each player's turn, they draw a random tile and must place it somewhere on the board. In order to place the tile, all of its edges must match with those surrounding it. Streets have to match up to streets, and grass has to match up with grass. Tiles can be rotated but not swapped out. So what a player will do on their turn is largely dependent on what tile they draw.
 
 ![Placement Example](/assets/dijkstra/images/placement_both.png)
 
@@ -20,7 +20,7 @@ Like Carcassonne, the game begins with a single tile on the board. When it is ea
 
 #### Types of Tiles
 
-Tiles can either be a simple road tiles which are used to connect other tiles, or they can be *special tiles* which includes one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: **Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.**
+Tiles can either be simple road tiles which are used to connect other tiles, or they can be *special tiles* which include one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: **Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.**
 
 Players *own* the tiles that they place, including any special tiles. This is indicated (at least right now in this mock-up stage) by little badges with the player's color on the bottom left of the placed tile. (See next image for example.) As tiles are laid and the board expands, paths of connected roads are formed and eventually completed. Only after a path is completed is it scored, and players receive points based on the value of the tiles that they own. We'll talk about the tile valuation process a little later—that's where the pathfinding algorithm comes in.
 
@@ -37,9 +37,9 @@ A path is scored whenever it gets *completed*, meaning that there is no possibil
 
 Basically: normal tiles are worth ``1`` point, mines are worth however long the paths connecting them to factories are, and factories are worth however long the paths connecting them to houses are, times 2, becuase they have to be loaded by mines first, which is harder to do.
 
-Since the majority of the scoring is ultimately based on the length of the paths between the special tiles, it is important that these paths be calculated thoroughly. A player should not receive extra points for their path just because a random-walk algorithm was used and took the long-route to get there. This, along with the complexity of some of the rules of calculating the paths that we will see in the next section, underscore my decision to use a shortest path finding algorithm in implementing the scoring logic of the game.
+Since the majority of the scoring is ultimately based on the length of the paths between the special tiles, it is important that these paths be calculated thoroughly. A player should not receive extra points for their path just because a random-walk algorithm was used and took the long route to get there. This, along with the complexity of some of the rules of calculating the paths that we will see in the next section, underscores my decision to use a shortest path finding algorithm in implementing the scoring logic of the game.
 
-But why Dijkstra and not [A*](https://en.wikipedia.org/wiki/A*_search_algorithm) or [other](https://en.wikipedia.org/wiki/Shortest_path_problem) [popular](https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm) [shortest](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) [distance](https://www.geeksforgeeks.org/johnsons-algorithm/) [algorithms](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm)? I'll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game. The best way to do that is by walking through a concrete example of how exactly we want a scoring event to play out.
+But why Dijkstra and not [A\*](https://en.wikipedia.org/wiki/A*_search_algorithm) or [other](https://en.wikipedia.org/wiki/Shortest_path_problem) [popular](https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm) [shortest](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) [distance](https://www.geeksforgeeks.org/johnsons-algorithm/) [algorithms](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm)? I'll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game. The best way to do that is by walking through a concrete example of how exactly we want a scoring event to play out.
 
 
 
@@ -95,7 +95,7 @@ After all of the paths from the mines are calculated and scored, the game then m
 
 ![Factories Score](/assets/dijkstra/images/factories1.png)
 
-The upper factory (``factory1``) has a nice straight little jot to ``house1`` with a path length of ``3``, making the value of ``factory1`` ``1 + (3*2) = 7``. Unfortunately, Blue didn't choose the best layout, because ``factory1`` is blocking the only possible path from ``factory2`` to ``house1``, and thus misses quite a few points.
+The upper factory (``factory1``) has a nice straight little jaunt to ``house1`` with a path length of ``3``, making the value of ``factory1`` ``1 + (3*2) = 7``. Unfortunately, Blue didn't choose the best layout, because ``factory1`` is blocking the only possible path from ``factory2`` to ``house1``, and thus misses quite a few points.
 
 So after Step 3:
 
@@ -112,7 +112,7 @@ values = {
 }
 ```
 
-If it seems that the restriction on movement through other special tiles is frustrating, one only need to look at one of the strategic possibilities depicted in the next image to understand the positive complexity they add to the game. Players must think ahead about how they want to plan their routes, all while competing with the plans of other players and against the luck of the tile draw.
+If it seems that the restriction on movement through other special tiles is frustrating, one only needs to look at one of the strategic possibilities depicted in the next image to understand the positive complexity they add to the game. Players must think ahead about how they want to plan their routes, all while competing with the plans of other players and against the luck of the tile draw.
 
 A clever layout to maximize points. Because the *shortest* path from the factory to the house passes through the mine, making it invalid, the shortest *valid* path is longer, leading to more points (17 for the factory!):
 
@@ -131,7 +131,7 @@ From the previous section, I showed that the pathfinding algorithm should be abl
 
 In looking through the possible shortest path finding algorithms which solve these problems, two stuck out as good candidates: the [A* Search algorithm](https://en.wikipedia.org/wiki/A*_search_algorithm), and [Dijkstra's algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm).
 
-A\* seems to be a crowd favorite, at least for certain use-cases. If you poke around on game-development [forums](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) and [blogs](https://gamedevacademy.org/how-to-use-pathfinding-in-phaser/), you see A\* prized everywhere, due mainly to its increased performance over Dijkstra in searching for the shortest path between two given nodes. Whereas Dijkstra's algorithm needs to analyze every node on a graph, A\* uses [heuristics](<https://en.wikipedia.org/wiki/Heuristic_(computer_science>) (basically, educated guesses) to find the shortest path between a beginning and an end node without needing to check every possible node on on entire graph. One stackexchange user writes: "When it comes to pathfinding, A\* is pretty much the golden ticket that everyone uses."
+A\* seems to be a crowd favorite, at least for certain use-cases. If you poke around on game-development [forums](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) and [blogs](https://gamedevacademy.org/how-to-use-pathfinding-in-phaser/), you see A\* prized everywhere, due mainly to its increased performance over Dijkstra in searching for the shortest path between two given nodes. Whereas Dijkstra's algorithm needs to analyze every node on a graph, A\* uses [heuristics](<https://en.wikipedia.org/wiki/Heuristic_(computer_science>) (basically, educated guesses) to find the shortest path between a beginning and an end node without needing to check every possible node on on entire graph. One Stack Exchange user writes: "When it comes to pathfinding, A\* is pretty much the golden ticket that everyone uses."
 
 A\* is basically an extended version of Dijkstra's algorithm that uses a system of educated guesses to get to an end node while analyzing as few nodes on the graph as possible, and thus taking less time. This is useful for situations, like pathfinding in a RTS, where one has a clear start node and end node. In our example, however, where one mine might connect to several different factories, we would need to run the A* algorithm several times from the same starting node, which could cause to the algorithm to retrace its steps several times—an inefficiency we would like to avoid if possible.
 
@@ -230,7 +230,7 @@ calcCompletedPathScore: function(nodesOnPath) {
 
 We also create a ``specialTiles`` object to be used for keeping track of which special tiles we need to pay attention to on this path, as well as set the ``loaded`` and ``supplying`` properties of each tile, which are used later in Step 3 of the scoring rules, when factories must be 'loaded' by mines before they can provide houses with goods.
 
-If the completed path were to contain no special tiles, the scoring process would end here. The final step of the ``calcCompletedPathScore`` function loops through the tiles objects in ``nodesOnPath`` and adds the ``value`` property to the score of whichever player's id corresponds with the ``playedBy`` property. Without any special tiles, this would always been ``1`` and each player would receive the same number of points as the number of tiles they own on the newly completed path.
+If the completed path were to contain no special tiles, the scoring process would end here. The final step of the ``calcCompletedPathScore`` function loops through the tiles objects in ``nodesOnPath`` and adds the ``value`` property to the score of whichever player's id corresponds with the ``playedBy`` property. Without any special tiles, this would always be ``1`` and each player would receive the same number of points as the number of tiles they own on the newly completed path.
 
 ```javascript
 calcCompletedPathScore: function(nodesOnPath) {
@@ -251,7 +251,7 @@ calcCompletedPathScore: function(nodesOnPath) {
 }
 ```
 
-It's the stuff that happens in Steps 2 and 3 of this process which are really of interest to us here in this article, however, so let's start taking a look at the code which actually implements Dijkstra's algorithm and assigns value to the special mine, factory, and house tiles.
+It's the stuff that happens in Steps 2 and 3 of this process which is really of interest to us here in this article, however, so let's start taking a look at the code which actually implements Dijkstra's algorithm and assigns value to the special mine, factory, and house tiles.
 
 #### Steps 2 and 3: Pathfinding
 
