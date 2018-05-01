@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.3">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2018-05-01T15:45:43+02:00</updated><id>http://localhost:4000/</id><title type="html">Jackson Bierfeldt Developer Blog</title><subtitle>Developer blog for Jackson Bierfeldt. Posts about current projects, ideas, and unanswered questions.</subtitle><entry><title type="html">Implementing Dijkstra</title><link href="http://localhost:4000/2018/05/01/implementing-dijkstra.html" rel="alternate" type="text/html" title="Implementing Dijkstra" /><published>2018-05-01T14:54:00+02:00</published><updated>2018-05-01T14:54:00+02:00</updated><id>http://localhost:4000/2018/05/01/implementing-dijkstra</id><content type="html" xml:base="http://localhost:4000/2018/05/01/implementing-dijkstra.html">&lt;h1 id=&quot;using-dijkstras-algorithm-for-score-calculation-in-a-tile-based-game&quot;&gt;Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game&lt;/h1&gt;
+
+&lt;p&gt;Recently, I’ve been building a multiplayer tile-laying game inspired by games like &lt;a href=&quot;https://en.wikipedia.org/wiki/Carcassonne_board_game&quot;&gt;Carcassonne&lt;/a&gt; and &lt;a href=&quot;https://en.wikipedia.org/wiki/Catan&quot;&gt;Settlers of Catan&lt;/a&gt;. I’ll soon have some other blog posts about the game and some of the technologies and architectures I’m building it with, but today I’m going to walkthrough and illustrate how I used &lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&quot;&gt;Dijkstra’s Algorithm&lt;/a&gt; to implement the scoring component of the game. Since there are already &lt;a href=&quot;https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work&quot;&gt;so&lt;/a&gt; &lt;a href=&quot;https://www.youtube.com/watch?v=NHZr6P1csiY&quot;&gt;many&lt;/a&gt; &lt;a href=&quot;https://www.manning.com/books/grokking-algorithms&quot;&gt;good&lt;/a&gt; &lt;a href=&quot;https://mitpress.mit.edu/books/introduction-algorithms&quot;&gt;resources&lt;/a&gt; explaining what Dijkstra’s algorithm is and how it works, I’m writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.&lt;/p&gt;
+
+&lt;h3 id=&quot;the-game--rules-and-objectives&quot;&gt;The Game — Rules and Objectives&lt;/h3&gt;
+
+&lt;p&gt;To begin, I’m going to explain the game, so as to motivate why I even needed a pathfinding algorithm in the first place. If all you want to see is my implementation, feel free to skip to the next section.&lt;/p&gt;
+
+&lt;h5 id=&quot;turns-and-tile-placement&quot;&gt;Turns and Tile Placement&lt;/h5&gt;
+
+&lt;p&gt;Like Carcassonne, the game begins with a single tile on the board. When it is each players’ turn, they draw a random tile and must place it somewhere on the board. In order to place the tile, all of its edges must match with those surrounding it. Streets have to match up to streets, and grass has to match up with grass. Tiles can be rotated but not swapped out. So what a player will do on their turn is largely dependent on what tile they draw.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/placement_both.png&quot; alt=&quot;Placement Example&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/tiletypes2.png&quot; alt=&quot;Tile Types&quot; /&gt;&lt;/p&gt;
+
+&lt;h5 id=&quot;types-of-tiles&quot;&gt;Types of Tiles&lt;/h5&gt;
+
+&lt;p&gt;Tiles can either be a simple road tiles which are used to connect other tiles, or they can be &lt;em&gt;special tiles&lt;/em&gt; which includes one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: &lt;strong&gt;Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Players &lt;em&gt;own&lt;/em&gt; the tiles that they place, including any special tiles. This is indicated (at least right now in this mock-up stage) by little badges with the player’s color on the bottom left of the placed tile. (See next image for example.) As tiles are laid and the board expands, paths are formed and eventually completed. Only after a path is completed is it scored, and players receive points based on the value of the tiles that they own.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/completed_path.png&quot; alt=&quot;Board Example&quot; /&gt;&lt;/p&gt;
+
+&lt;h5 id=&quot;scoring-the-game&quot;&gt;Scoring the Game&lt;/h5&gt;
+
+&lt;p&gt;A path is scored whenever it gets &lt;em&gt;completed&lt;/em&gt;, meaning that there is no possibility for other tiles to be added to it: it becomes a closed system. Upon completion, this closed system is analyzed to determine the value of each of the tiles within it according to the following rules:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Each tile on a completed path is automatically worth &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; point.&lt;/li&gt;
+  &lt;li&gt;Each mine &lt;em&gt;which is connected to a factory&lt;/em&gt; is worth a number of points equal to the length of the shortest possible path between it and the factories that it supplies. If it supplies multiple factories, the distances of these paths are summed. A mine which is not connected to at least one factory is worth the default &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; point.&lt;/li&gt;
+  &lt;li&gt;Each factory &lt;em&gt;which is supplied by a mine &lt;strong&gt;and&lt;/strong&gt; which is connected to a house&lt;/em&gt; is worth a number of points equal to the length of the shortest possible path between it and the houses that it supplies &lt;strong&gt;multiplied by&lt;/strong&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;2&lt;/code&gt;. If a factory is neither supplied by a mine nor connected to at least one house, it is only worth the default &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; point.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Since the majority of the scoring is ultimately based on the length of the paths between the special tiles, it is important that these paths be calculated thoroughly. A player should not receive extra points for their path just because a random-walk algorithm was used and took the long-route to get there. This, along with the complexity of some of the rules of calculating the paths that we will see in the next section, underscore my decision to use a shortest path finding algorithm in implementing the scoring logic of the game.&lt;/p&gt;
+
+&lt;p&gt;But why Dijkstra and not [A&lt;em&gt;](https://en.wikipedia.org/wiki/A&lt;/em&gt;_search_algorithm) or &lt;a href=&quot;https://en.wikipedia.org/wiki/Shortest_path_problem&quot;&gt;other&lt;/a&gt; &lt;a href=&quot;https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm&quot;&gt;popular&lt;/a&gt; &lt;a href=&quot;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&quot;&gt;shortest&lt;/a&gt; &lt;a href=&quot;https://www.geeksforgeeks.org/johnsons-algorithm/&quot;&gt;distance&lt;/a&gt; &lt;a href=&quot;https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm&quot;&gt;algorithms&lt;/a&gt;? I’ll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game.&lt;/p&gt;
+
+&lt;h5 id=&quot;example&quot;&gt;Example&lt;/h5&gt;
+
+&lt;p&gt;For this example, I am going to take the completed path that I already showed you above and walk through exactly what I want to happen when the values of the tiles are calculated as the game goes through the three rules I outlined above. As we step through the rules, I’ll show illustrations and keep a tally. (For convenience, I’m not going to list the non-special tiles, because their values won’t change after the 1st rule is applied, but keep in mind that they are there.)&lt;/p&gt;
+
+&lt;h6 id=&quot;step-1&quot;&gt;Step 1&lt;/h6&gt;
+
+&lt;p&gt;Step 1 is easy. Loop through all of the tiles on the completed path and assign a value of 1. This rewards players who used their tiles to help build and complete the path, even if they aren’t reaping benefits of industry.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// special tiles from top left&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// to bottom left of the image&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;values&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by red&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;house1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;factory1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by blue&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;factory2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// owned by blue&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// all other tiles = 1&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h6 id=&quot;step-2&quot;&gt;Step 2&lt;/h6&gt;
+
+&lt;p&gt;Now we are coming to the pathfinding. We need to find the optimal valid paths from each mine to each factory that it can possibly supply. The following image shows what we would like our pathfinding algorithm to do. The orange lines are leading from the mines to the factories.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/mines2.png&quot; alt=&quot;Score Example&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;What’s happening, in prose: Yellow owns two mines (&lt;code class=&quot;highlighter-rouge&quot;&gt;mine2&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;mine3&lt;/code&gt;), and each mine has a free path to each of the two factories owned by blue (&lt;code class=&quot;highlighter-rouge&quot;&gt;factory1&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;factory2&lt;/code&gt;). Good for Yellow! The mine on the right (&lt;code class=&quot;highlighter-rouge&quot;&gt;mine3&lt;/code&gt;) has two valid paths, one of length &lt;code class=&quot;highlighter-rouge&quot;&gt;3&lt;/code&gt; and one of length &lt;code class=&quot;highlighter-rouge&quot;&gt;6&lt;/code&gt;. Keeping in mind that this mine has an initial value of &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; from the first scoring rule, this means that the new tile value for &lt;code class=&quot;highlighter-rouge&quot;&gt;mine3&lt;/code&gt; is &lt;code class=&quot;highlighter-rouge&quot;&gt;1 + 3 + 6 = 10&lt;/code&gt;. A pretty nice bonus! Similarly, Yellow’s mine of the left also has two valid paths to factories, one of length &lt;code class=&quot;highlighter-rouge&quot;&gt;3&lt;/code&gt; and one of length &lt;code class=&quot;highlighter-rouge&quot;&gt;4&lt;/code&gt;, bringing this mine tile’s total to &lt;code class=&quot;highlighter-rouge&quot;&gt;1 + 3 + 4 = 8&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;So while it seems that Yellow is reaping a lot of points this turn, we notice that red also owns a mine in the upper left of the path (&lt;code class=&quot;highlighter-rouge&quot;&gt;mine1&lt;/code&gt;). Unfortunately for red, however, Yellow’s house (&lt;code class=&quot;highlighter-rouge&quot;&gt;house1&lt;/code&gt;) is blocking it from connecting to a factory, causing Red’s mine to only be worth the default amount of &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; point. In order to add an element of strategic placement and defensive blocking, we want special tiles to only be able to serve as end points and for it to be invalid for paths to pass through them. Sorry Red…&lt;/p&gt;
+
+&lt;p&gt;So after the calculations from step 2, the tile values look like this:&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// after step 2: mine-&amp;gt;factory&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;values&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by red&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;house1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;factory1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by blue&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;factory2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// owned by blue&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// total 8; owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// total 10; owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// all other tiles = 1&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h6 id=&quot;step-3&quot;&gt;Step 3&lt;/h6&gt;
+
+&lt;p&gt;After all of the paths from the mines are calculated and scored, the game then moves on to the factories. Remember, only factories which have been supplied by mines are even eligible for shipping their goods to houses. In our example, however, both factories have been supplied, so both will attempt to draw paths to houses on path. Lucky for Blue, they own both of the factories, and with the 2x multiplier, they should expect a big payout. Let’s see what happens:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/factories1.png&quot; alt=&quot;Factories Score&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The upper factory (&lt;code class=&quot;highlighter-rouge&quot;&gt;factory1&lt;/code&gt;) has a nice straight little jot to &lt;code class=&quot;highlighter-rouge&quot;&gt;house1&lt;/code&gt; with a path length of &lt;code class=&quot;highlighter-rouge&quot;&gt;3&lt;/code&gt;, making the value of &lt;code class=&quot;highlighter-rouge&quot;&gt;factory1&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;1 + (3*2) = 7&lt;/code&gt;. Unfortunately, Blue didn’t choose the best layout, because &lt;code class=&quot;highlighter-rouge&quot;&gt;factory1&lt;/code&gt; is blocking the only possible path from &lt;code class=&quot;highlighter-rouge&quot;&gt;factory2&lt;/code&gt; to &lt;code class=&quot;highlighter-rouge&quot;&gt;house1&lt;/code&gt;, and thus misses quite a few points. Better luck next time, Blue!&lt;/p&gt;
+
+&lt;p&gt;So after Step 3:&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// after step 3: factory-&amp;gt;house&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;values&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by red&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;house1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;factory1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// total 7; owned by blue&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;factory2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// owned by blue&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// total 8; owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;mine3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// total 10; owned by yellow&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// all other tiles = 1&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;If it seems that the restriction on movement through other special tiles is frustrating, one only need to look at one of the strategic possibilities depicted in the next image to understand the positive complexity they add to the game. Players must think ahead about how they want to plan their routes, all while competing with the plans of other players and against the luck of the tile draw.&lt;/p&gt;
+
+&lt;p&gt;A clever layout to maximize points (17 for the factory!):&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/dijkstra/images/routearound.png&quot; alt=&quot;Route Around&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;So now that I’ve shown how the game’s scoring mechanic relies on a pathfinding algorithm, I’ll explain my choice to use Dijkstra’s Algorithm over the several other popular shortest path finding algorithms available.&lt;/p&gt;
+
+&lt;h3 id=&quot;why-dijkstra-and-not-a&quot;&gt;Why Dijkstra and not A*?&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Quick Note on Terminology&lt;/strong&gt;: In the literature about pathfinding, the concepts of  &lt;strong&gt;graphs&lt;/strong&gt;, &lt;strong&gt;nodes&lt;/strong&gt;, and &lt;strong&gt;edges&lt;/strong&gt; are used. A graph is an abstract data structure used to analyze the connections between objects. A graph consists of nodes which are connected to each other by edges. In the example of our game, the closed system of a completed path is a graph, each tile within it is a node, and the connections between the tiles are edges.&lt;/p&gt;
+
+&lt;p&gt;From the previous section, we saw that the pathfinding algorithm should be able to accomplish the following things:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Find the shortest possible paths from &lt;strong&gt;one&lt;/strong&gt; starting node to &lt;strong&gt;all&lt;/strong&gt; possible ending nodes. (e.g. from one mine to all factories).&lt;/li&gt;
+  &lt;li&gt;Ensure that special tiles only serve as endpoints on paths and cannot be traveled through.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;In looking through the possible shortest path finding algorithms which solve these problems, two stuck out as good candidates: the &lt;a href=&quot;https://en.wikipedia.org/wiki/A*_search_algorithm&quot;&gt;A* Search algorithm&lt;/a&gt;, and &lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&quot;&gt;Dijkstra’s algorithm&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;A* seems to be a crowd favorite, at least for certain use-cases. If you poke around on game-development &lt;a href=&quot;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&quot;&gt;forums&lt;/a&gt; and &lt;a href=&quot;https://gamedevacademy.org/how-to-use-pathfinding-in-phaser/&quot;&gt;blogs&lt;/a&gt;, you see A* touted everywhere, due mainly to its increased performance over Dijkstra in searching for the shortest path between two given nodes. Whereas Dijkstra’s algorithm needs to analyze every node on a graph, A* uses &lt;a href=&quot;https://en.wikipedia.org/wiki/Heuristic_(computer_science&quot;&gt;heuristics&lt;/a&gt; (basically, educated guesses) to find the shortest path between a beginning and an end node without needing to check every possible node on on entire graph. One stackexchange user writes: “When it comes to pathfinding, A* is pretty much the golden ticket that everyone uses.”&lt;/p&gt;
+
+&lt;p&gt;A* is basically an extended version of Dijkstra’s algorithm that uses a system of educated guesses to get to an end node while analyzing as few nodes on the graph as possible, and thus taking less time. This is useful for situations, like pathfinding in a RTS, where one has a clear start node and end node. In our example, however, where one mine might connect to several different factories, we would need to run the A* algorithm several times from the same starting node, which could cause to the algorithm to retrace its steps several times—an inefficiency we would like to avoid if possible.&lt;/p&gt;
+
+&lt;p&gt;In debating between using A* and Dijkstra, I opted for Dijkstra because I knew that I would need to reach multiple end nodes from one starting node, and that if I were using A*, I would need to run the algorithm multiple times in order to accomplish this, potentially calculating parts of the same route over and over again. Because Dijkstra’s algorithm—at least, in my implementation of it—can calculate the shortest distance to every node in a graph without needing to have a target or goal node up-front, it seems to make the most sense for my game, wherein one starting node can (and likely will) have multiple semi-overlapping paths to multiple end nodes.&lt;/p&gt;
+
+&lt;h3 id=&quot;the-code--implementation-in-javascript&quot;&gt;The Code — Implementation in Javascript&lt;/h3&gt;
+
+&lt;p&gt;Ok, now that we understand how the game works, what goals we want the algorithm to accomplish, and why I choose Dijkstra’s algorithm to accomplish these goals, we can start to look at the code. Everything is written in Javascript (ECMAScript 2016). (Note: Throughout the post, I’ve hidden a lot of the project-specific implementation details or simplified things in cases where it seemed superfluous or confusing. If you want to see the full code all in one place, you can find it &lt;a href=&quot;/assets/dijkstra/files/pathfinding.js&quot;&gt;here&lt;/a&gt;.)&lt;/p&gt;
+
+&lt;h6 id=&quot;the-nodesonpath-object&quot;&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; Object&lt;/h6&gt;
+
+&lt;p&gt;The first thing to understand is the information the rest of the game provides to the pathfinding/scoring mechanism. Every time a player places a tile and ends their turn, the game checks to see if placed tile is on a completed path. (The specifics of this will be for another blog post.) If that path is completed, the game passes an object containing an array called &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; to the scoring mechanism. This array is populated with objects representing each tile on the completed path. A typical &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; array looks like this:&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// nodesOnPath - array of tileObjects&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// tileObject&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// unique id of tile&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;neighbors&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;11&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// unique ids of neighboring tiles&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;factory&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// tile type &quot;mine&quot;, &quot;factory&quot;, &quot;house&quot;, or null&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;playedBy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// unique id of player who owns tile&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// x coord&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// y coord&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// another tileObject&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;neighbors&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This array is passed as the only argument to a function called &lt;code class=&quot;highlighter-rouge&quot;&gt;calcCompletedPathScore&lt;/code&gt; which is responsible for taking the information contained in this array, and turning it into point amounts awarded to each player who owns any tiles on the newly completed path. This is accomplished in three steps, each corresponding to one of the steps outlined in Scoring Rules section above.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;calcCompletedPathScore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// calculates the value of a completed path&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// for the various players&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// step 1: prepare nodesOnPath and set value = 1 for each tile&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// steps 2 + 3: use Dijkstra to increase value of special tiles&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// final: give player points equal to the value of each tile they own&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h6 id=&quot;scoring-step-1&quot;&gt;Scoring: Step 1&lt;/h6&gt;
+
+&lt;p&gt;Before doing anything related to pathfinding and Dijkstra, the function does a little set-up and sets some initial values. The way that points will be awarded to each player is simple: each tile is given a &lt;code class=&quot;highlighter-rouge&quot;&gt;value&lt;/code&gt; property which is an integer number of points that the player who owns the tile will receive at the end of the scoring calculation. In accordance with Step 1 of our scoring rules, each tile’s default &lt;code class=&quot;highlighter-rouge&quot;&gt;value&lt;/code&gt; property is set to &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt;, so that each tile on the path is automatically worth &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; point.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;calcCompletedPathScore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// calculates the value of a completed path&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// for the various players&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// used to keep track of which special tiles,&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// if any, are on the path&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{};&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// for each node on path...&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// add initial value of tile for score&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// if tile is a special tile&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+      &lt;span class=&quot;c1&quot;&gt;// set loaded and supplying properties&lt;/span&gt;
+      &lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;loaded&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;supplying&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+      &lt;span class=&quot;c1&quot;&gt;// populate specialTiles object&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[];&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+      &lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;push&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// steps 2 + 3: use Dijkstra to increase value of special tiles&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// final: give player points equal to the value of each tile they own&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We also create a &lt;code class=&quot;highlighter-rouge&quot;&gt;specialTiles&lt;/code&gt; object to be used for keeping track of which special tiles we need to pay attention to on this path, as well as set the &lt;code class=&quot;highlighter-rouge&quot;&gt;loaded&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;supplying&lt;/code&gt; properties of each tile, which are used later in Step 3 of the scoring rules, when factories must be ‘loaded’ by mines before they can provide houses with goods.&lt;/p&gt;
+
+&lt;p&gt;If the completed path were to contain no special tiles, the scoring process would end here. The final step of the &lt;code class=&quot;highlighter-rouge&quot;&gt;calcCompletedPathScore&lt;/code&gt; function loops through the tiles objects in &lt;code class=&quot;highlighter-rouge&quot;&gt;nodesOnPath&lt;/code&gt; and adds the &lt;code class=&quot;highlighter-rouge&quot;&gt;value&lt;/code&gt; property to the score of whichever player’s id corresponds with the &lt;code class=&quot;highlighter-rouge&quot;&gt;playedBy&lt;/code&gt; property. Without any special tiles, this would always been &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; and each player would receive the same number of points as the number of tiles they own on the newly completed path.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;calcCompletedPathScore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// step 1: prepare nodesOnPath and set value = 1 for each tile&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;//...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// steps 2 + 3: use Dijkstra to increase value of special tiles&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;//...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// for each node on the path that belongs to player,&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// give that player the value of the tile&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// playerObject has a method addPoints(int)&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;players&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;playedBy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;addPoints&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It’s the stuff that happens in Steps 2 and 3 of this process which are really of interest to us here in this article, however, so let’s start taking a look at the code which actually implements Dijkstra’s algorithm and assigns value to the special mine, factory, and house tiles.&lt;/p&gt;
+
+&lt;h6 id=&quot;steps-2-and-3-pathfinding&quot;&gt;Steps 2 and 3: Pathfinding&lt;/h6&gt;
+
+&lt;p&gt;(Note: My implementation of Dijkstra’s algorithm was heavily inspired by that of Stella Chung’s, which she documents in a blogpost &lt;a href=&quot;https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04&quot;&gt;here.&lt;/a&gt;)&lt;/p&gt;
+
+&lt;p&gt;The following is the component of the &lt;code class=&quot;highlighter-rouge&quot;&gt;calcCompletedPathScore&lt;/code&gt; function which deals with pathfinding. I left out most of the nitty-gritty details of validity checking for clarity, but the structure should be clear. You’ll notice that there are two main functions which this component relies on which we haven’t looked at yet: &lt;code class=&quot;highlighter-rouge&quot;&gt;getDijkstraTree&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt;. We’ll look at the actual functions for each of these more in a second, but for now, just pay attention to where they are being called in the &lt;code class=&quot;highlighter-rouge&quot;&gt;calcCompletedPathScore&lt;/code&gt; function.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;calcCompletedPathScore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// step 1: prepare nodesOnPath and set value = 1 for each tile&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{};&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// populate specialTiles...&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// steps 2 + 3: use Dijkstra to increase value of special tiles&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;calcSpecialTileBonus&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;bonusAmount&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;mustBeLoaded&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// check if there is at least one of each startType and endType on path...&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// if startType must be loaded, check if it is...&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// for each instance of startType on path...&lt;/span&gt;
+
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// id of tile to be start node&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;dijkstraTree&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getDijkstraTree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// for each valid endType on path...&lt;/span&gt;
+
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// id of tile to be end node&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getOptimalPathFromTree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dijkstraTree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// check path validity...&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// if valid:&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// add path length to value of tile&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;nodeOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;bonusAmount&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// if invalid:&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// no valid path — unscored&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// mine-&amp;gt;factory, bonus: 1, mustBeLoaded = false&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;calcSpecialTileBonus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'mine'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'factory'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// factory-&amp;gt;house, bonus: 2, mustBeLoaded = true&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;calcSpecialTileBonus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'factory'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'house'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+
+  &lt;span class=&quot;c1&quot;&gt;// final: give player points equal to the value of each tile they own&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For each valid start node, we call a function &lt;code class=&quot;highlighter-rouge&quot;&gt;getDijkstraTree&lt;/code&gt; which will return a data structure that contains the shortest possible paths from the start node to every node on the graph. You’ll notice that we only call this function &lt;em&gt;once&lt;/em&gt; per start node. This function is where all the heavy lifting is done, so we want to call it as few times as possible. Then, once the &lt;code class=&quot;highlighter-rouge&quot;&gt;dijkstraTree&lt;/code&gt; has been built, we call a function &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt; for each valid end node. This function simply looks up the path between the start node and the given end node in the already built &lt;code class=&quot;highlighter-rouge&quot;&gt;dijkstraTree&lt;/code&gt; object, and stores it as &lt;code class=&quot;highlighter-rouge&quot;&gt;optimalPath&lt;/code&gt;. After checking for validity, the length of &lt;code class=&quot;highlighter-rouge&quot;&gt;optimalPath&lt;/code&gt; is then used to set the value of the tile, which will later be used to assign points to the player.&lt;/p&gt;
+
+&lt;p&gt;We wrap all of this up into a function called &lt;code class=&quot;highlighter-rouge&quot;&gt;calcSpecialTileBonus&lt;/code&gt; and then call it twice, once with &lt;code class=&quot;highlighter-rouge&quot;&gt;'mine'&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;'factory'&lt;/code&gt; as the startTypes and endTypes, and once with &lt;code class=&quot;highlighter-rouge&quot;&gt;'factory'&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;'house'&lt;/code&gt;. The second time, you’ll notice that we include in the arguments a flag that tells us to check if &lt;code class=&quot;highlighter-rouge&quot;&gt;loaded == true&lt;/code&gt; and the modifier &lt;code class=&quot;highlighter-rouge&quot;&gt;2&lt;/code&gt; for calculating the bonus. It seemed like a good idea to abstract this rather than write it twice because 90% of the code would be shared between the two cases.&lt;/p&gt;
+
+&lt;h6 id=&quot;implementing-dijkstras-algorithm&quot;&gt;Implementing Dijkstra’s Algorithm&lt;/h6&gt;
+
+&lt;p&gt;Let’s turn now to the actual implementation of the algorithm and look at both functions &lt;code class=&quot;highlighter-rouge&quot;&gt;getDijkstraTree&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt;, as well as the helper functions which support them.&lt;/p&gt;
+
+&lt;p&gt;For Dijkstra’s algorithm, we usually want to keep track of three things:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;the cost of getting to each node from the start node&lt;/li&gt;
+  &lt;li&gt;the chain of previous or parent nodes used in traversing the graph&lt;/li&gt;
+  &lt;li&gt;a list of unvisited or unprocessed nodes&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;My implementation, following &lt;a href=&quot;https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04&quot;&gt;Stella Chung&lt;/a&gt;, uses a list of processed nodes instead of a list of unprocessed nodes, but the end result is the same.&lt;/p&gt;
+
+&lt;p&gt;Following the &lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm#Algorithm&quot;&gt;algorithm definition&lt;/a&gt; on the Wikipedia page, we first create our lists, set the cost of the start node to &lt;code class=&quot;highlighter-rouge&quot;&gt;0&lt;/code&gt; and the unknown costs of the rest of the nodes on the graph to &lt;code class=&quot;highlighter-rouge&quot;&gt;Infinity&lt;/code&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getDijkstraTree&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// build a tree of costs and parents from startId&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// to every other node on the path&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// create initial objects and lists&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{};&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;parents&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{};&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[];&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// set start cost = 0&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// set tentative cost for all other nodes to Infinity&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;id&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;Infinity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// currentNode = start node&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getLowestNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;//...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The helper function &lt;code class=&quot;highlighter-rouge&quot;&gt;getLowestNode&lt;/code&gt; on the last line above returns the lowest cost, unprocessed node in the graph. This way, the algorithm is always choosing the optimal node as the next one to process. The first time it is run, it will return the start node, of course, because it is the only non-Infinity node in the &lt;code class=&quot;highlighter-rouge&quot;&gt;costs&lt;/code&gt; object.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getLowestNode&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Object&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;keys&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reduce&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;lowest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;lowest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;lowest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;includes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;nx&quot;&gt;lowest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;lowest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In the rest of &lt;code class=&quot;highlighter-rouge&quot;&gt;getDijkstraTree&lt;/code&gt;, we perform steps 3–7 of Wikipedia’s algorithm definition.&lt;/p&gt;
+
+&lt;p&gt;For each node, we get its current cost (which will be the total thus-far cost required to reach it from the start node) and the costs of its neighbors. Since our graph is just a grid of connected tiles, we use &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; for the edge cost for connections to blank tiles and &lt;code class=&quot;highlighter-rouge&quot;&gt;1001&lt;/code&gt; for connections to special tiles. (The game has a limited number of tiles and turns and always will end before a blank path longer than 1000 tiles can be created, so this number is safe.) This ensures that the lowest cost path will always be through blank tiles, and thus implements the rule that paths are not allowed to travel through special tiles.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getDijkstraTree&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;//...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// currentNode = start node&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getLowestNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// as long as there are nodes which are not in processed...&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;cost&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// cost of current node&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;children&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getNodeById&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;neighbors&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;childrenCosts&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getCostsOfNeighbors&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;children&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// 1 or 1001&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;n&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;childrenCosts&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;newCost&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;cost&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;childrenCosts&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// cost of current node + travel&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;newCost&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;newCost&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;nx&quot;&gt;parents&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;n&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// add currentNode to processed list after processing&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;push&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// get lowest, unprocessed node&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;currentNode&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getLowestNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;processed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// return path, costs, and parents for use with getOptimalPathFromTree&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;parents&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;(Note: &lt;code class=&quot;highlighter-rouge&quot;&gt;getNodeById&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;getCostsOfNeighbors&lt;/code&gt; are just helper functions which respectively use the node’s unique id to access its &lt;code class=&quot;highlighter-rouge&quot;&gt;neighbors&lt;/code&gt; property and assign a cost of either &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;1001&lt;/code&gt; depending on whether the neighbor is a blank or special tile.)&lt;/p&gt;
+
+&lt;p&gt;Once we have the costs of the current node and all of its neighbors, we tentatively add the cost of the current node to the cost of each of its neighbors, and check whether the currently stored lowest cost for each neighbor node is higher than the tentative one we just calculated. If the already stored cost &lt;em&gt;is&lt;/em&gt; higher, that means we just found a less-costly way to reach this node from the start node, so we store that instead and record the current node as the ‘parent’ of the neighbor node we just updated.&lt;/p&gt;
+
+&lt;p&gt;Once all the neighbors of the current node have been checked out, we then mark the current node as processed, meaning that it will never be visited again, and get a new current node: whichever has the lowest cost from start and has yet to be processed. This loop is completed until every node on the graph has been processed. What we are left with are two objects: &lt;code class=&quot;highlighter-rouge&quot;&gt;costs&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;parents&lt;/code&gt;, which we return and designate as &lt;code class=&quot;highlighter-rouge&quot;&gt;dijkstraTree&lt;/code&gt; in our &lt;code class=&quot;highlighter-rouge&quot;&gt;calcCompletedPathScore&lt;/code&gt; function.&lt;/p&gt;
+
+&lt;p&gt;Now that we have a calculated tree containing the costs to each node from the start node, we can use it to find the optimal path to each of the end nodes that we are interested in by using &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt;. We pass it the tree that we calculated in &lt;code class=&quot;highlighter-rouge&quot;&gt;getDijkstraTree&lt;/code&gt; as well as the unique id of the end node that we are interested in finding the optimal path to.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getOptimalPathFromTree&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;tree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// return array of actual nodes on the optimal path&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getNodeById&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;tree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)];&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;parent&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;tree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;parents&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;parent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;push&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getNodeById&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;tree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;parent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;parent&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;tree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;parents&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;parent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reverse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// return int of the target Score&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// used to check validity. if &amp;gt;2000,&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// then invalid&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;targetScore&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;tree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;costs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;targetScore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The function starts with the end node, gets its parent node, and pushes it to an an array &lt;code class=&quot;highlighter-rouge&quot;&gt;optimalPath&lt;/code&gt;. It then gets the parent node of this node, and so forth, until it retraces its way back to the start node, which has no parent. In doing this, it recreates the path taken from the start node to the end node. It returns this path, along with the final score of this final node, designated as &lt;code class=&quot;highlighter-rouge&quot;&gt;targetScore&lt;/code&gt;. Because we set connections to special tiles to be &lt;code class=&quot;highlighter-rouge&quot;&gt;1001&lt;/code&gt;, any targetScore higher than &lt;code class=&quot;highlighter-rouge&quot;&gt;2000&lt;/code&gt; must indicate a path that passes through another special tile, and thus is invalid. We check for this in &lt;code class=&quot;highlighter-rouge&quot;&gt;calcCompletedPathScore&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;calcSpecialTileBonus&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;specialTiles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;endType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;bonusAmount&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;mustBeLoaded&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// check if there is at least one of each startType and endType on path...&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// if startType must be loaded, check if it is...&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// for each instance of startType on path...&lt;/span&gt;
+
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;c1&quot;&gt;// id of tile to be start node&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;dijkstraTree&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getDijkstraTree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nodesOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// for each valid endType on path...&lt;/span&gt;
+
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// id of tile to be end node&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getOptimalPathFromTree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dijkstraTree&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;finishId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// check path validity...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// if greater than 2000, then invalid&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;targetScore&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// add path length to value of tile&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;nodeOnPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;startId&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;optimalPath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;bonusAmount&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;//...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;If the optimal path returned by &lt;code class=&quot;highlighter-rouge&quot;&gt;getOptimalPathFromTree&lt;/code&gt; is valid, we then use the length of this path (along with the &lt;code class=&quot;highlighter-rouge&quot;&gt;*2&lt;/code&gt; modifier in the case of factories and houses) to change the value of the special tiles on the completed path, and thus to allow proper score calculation based on the rules we set out to implement.&lt;/p&gt;
+
+&lt;h3 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h3&gt;
+
+&lt;p&gt;I hope that you were able to see from this example what it looks like to implement Dijkstra’s (or any other shortest path finding algorithm) in a grid- or tile-based game like the one I’ve been developing as well as some of the design decisions that went into choosing this algorithm. If I were building a more dynamic, performance intensive game like a real-time strategy or tower defense game, I would probably use A* or some version of it.&lt;/p&gt;
+
+&lt;p&gt;Although I tried to keep my mind bent towards efficiency while building this, I’m sure there are plenty of places where it could be improved. Many suggest that Dijkstra’s algorithm should be implemented with a &lt;a href=&quot;https://en.wikipedia.org/wiki/Fibonacci_heap&quot;&gt;Fibonacci heap&lt;/a&gt;, but due to the relatively small sizes of the graphs that my game is capable of generating, it seemed to be far more trouble than it would be worth to implement this. But perhaps for a future blog post!&lt;/p&gt;
+
+&lt;p&gt;If there is anything that I missed or could improve, please reach out to me at &lt;a href=&quot;mailto:jbierfeldt@gmail.com&quot;&gt;jbierfeldt@gmail.com&lt;/a&gt; and let me know!&lt;/p&gt;
+
+&lt;h6 id=&quot;inspiration-and-resources&quot;&gt;Inspiration and Resources:&lt;/h6&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&quot;&gt;https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/A-star_search_algorithm&quot;&gt;https://en.wikipedia.org/wiki/A-star_search_algorithm&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04&quot;&gt;https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Maze_solving_algorithm&quot;&gt;https://en.wikipedia.org/wiki/Maze_solving_algorithm&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&quot;&gt;https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://mitpress.mit.edu/books/introduction-algorithms&quot;&gt;https://mitpress.mit.edu/books/introduction-algorithms&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><summary type="html">Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game</summary></entry></feed>

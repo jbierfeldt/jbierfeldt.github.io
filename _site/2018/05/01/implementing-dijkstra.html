@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.4.0 -->
+<title>Implementing Dijkstra | Jackson Bierfeldt Developer Blog</title>
+<meta name="generator" content="Jekyll v3.7.3" />
+<meta property="og:title" content="Implementing Dijkstra" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game" />
+<meta property="og:description" content="Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game" />
+<link rel="canonical" href="http://localhost:4000/2018/05/01/implementing-dijkstra.html" />
+<meta property="og:url" content="http://localhost:4000/2018/05/01/implementing-dijkstra.html" />
+<meta property="og:site_name" content="Jackson Bierfeldt Developer Blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-05-01T14:54:00+02:00" />
+<script type="application/ld+json">
+{"description":"Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game","@type":"BlogPosting","url":"http://localhost:4000/2018/05/01/implementing-dijkstra.html","headline":"Implementing Dijkstra","dateModified":"2018-05-01T14:54:00+02:00","datePublished":"2018-05-01T14:54:00+02:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2018/05/01/implementing-dijkstra.html"},"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Jackson Bierfeldt Developer Blog" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">Jackson Bierfeldt Developer Blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+              <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+              <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Implementing Dijkstra</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2018-05-01T14:54:00+02:00" itemprop="datePublished">May 1, 2018
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h1 id="using-dijkstras-algorithm-for-score-calculation-in-a-tile-based-game">Using Dijkstra’s Algorithm for Score Calculation in a Tile-based Game</h1>
+
+<p>Recently, I’ve been building a multiplayer tile-laying game inspired by games like <a href="https://en.wikipedia.org/wiki/Carcassonne_board_game">Carcassonne</a> and <a href="https://en.wikipedia.org/wiki/Catan">Settlers of Catan</a>. I’ll soon have some other blog posts about the game and some of the technologies and architectures I’m building it with, but today I’m going to walkthrough and illustrate how I used <a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm">Dijkstra’s Algorithm</a> to implement the scoring component of the game. Since there are already <a href="https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work">so</a> <a href="https://www.youtube.com/watch?v=NHZr6P1csiY">many</a> <a href="https://www.manning.com/books/grokking-algorithms">good</a> <a href="https://mitpress.mit.edu/books/introduction-algorithms">resources</a> explaining what Dijkstra’s algorithm is and how it works, I’m writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.</p>
+
+<h3 id="the-game--rules-and-objectives">The Game — Rules and Objectives</h3>
+
+<p>To begin, I’m going to explain the game, so as to motivate why I even needed a pathfinding algorithm in the first place. If all you want to see is my implementation, feel free to skip to the next section.</p>
+
+<h5 id="turns-and-tile-placement">Turns and Tile Placement</h5>
+
+<p>Like Carcassonne, the game begins with a single tile on the board. When it is each players’ turn, they draw a random tile and must place it somewhere on the board. In order to place the tile, all of its edges must match with those surrounding it. Streets have to match up to streets, and grass has to match up with grass. Tiles can be rotated but not swapped out. So what a player will do on their turn is largely dependent on what tile they draw.</p>
+
+<p><img src="/assets/dijkstra/images/placement_both.png" alt="Placement Example" /></p>
+
+<p><img src="/assets/dijkstra/images/tiletypes2.png" alt="Tile Types" /></p>
+
+<h5 id="types-of-tiles">Types of Tiles</h5>
+
+<p>Tiles can either be a simple road tiles which are used to connect other tiles, or they can be <em>special tiles</em> which includes one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: <strong>Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.</strong></p>
+
+<p>Players <em>own</em> the tiles that they place, including any special tiles. This is indicated (at least right now in this mock-up stage) by little badges with the player’s color on the bottom left of the placed tile. (See next image for example.) As tiles are laid and the board expands, paths are formed and eventually completed. Only after a path is completed is it scored, and players receive points based on the value of the tiles that they own.</p>
+
+<p><img src="/assets/dijkstra/images/completed_path.png" alt="Board Example" /></p>
+
+<h5 id="scoring-the-game">Scoring the Game</h5>
+
+<p>A path is scored whenever it gets <em>completed</em>, meaning that there is no possibility for other tiles to be added to it: it becomes a closed system. Upon completion, this closed system is analyzed to determine the value of each of the tiles within it according to the following rules:</p>
+
+<ul>
+  <li>Each tile on a completed path is automatically worth <code class="highlighter-rouge">1</code> point.</li>
+  <li>Each mine <em>which is connected to a factory</em> is worth a number of points equal to the length of the shortest possible path between it and the factories that it supplies. If it supplies multiple factories, the distances of these paths are summed. A mine which is not connected to at least one factory is worth the default <code class="highlighter-rouge">1</code> point.</li>
+  <li>Each factory <em>which is supplied by a mine <strong>and</strong> which is connected to a house</em> is worth a number of points equal to the length of the shortest possible path between it and the houses that it supplies <strong>multiplied by</strong><code class="highlighter-rouge">2</code>. If a factory is neither supplied by a mine nor connected to at least one house, it is only worth the default <code class="highlighter-rouge">1</code> point.</li>
+</ul>
+
+<p>Since the majority of the scoring is ultimately based on the length of the paths between the special tiles, it is important that these paths be calculated thoroughly. A player should not receive extra points for their path just because a random-walk algorithm was used and took the long-route to get there. This, along with the complexity of some of the rules of calculating the paths that we will see in the next section, underscore my decision to use a shortest path finding algorithm in implementing the scoring logic of the game.</p>
+
+<p>But why Dijkstra and not [A<em>](https://en.wikipedia.org/wiki/A</em>_search_algorithm) or <a href="https://en.wikipedia.org/wiki/Shortest_path_problem">other</a> <a href="https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm">popular</a> <a href="https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there">shortest</a> <a href="https://www.geeksforgeeks.org/johnsons-algorithm/">distance</a> <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm">algorithms</a>? I’ll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game.</p>
+
+<h5 id="example">Example</h5>
+
+<p>For this example, I am going to take the completed path that I already showed you above and walk through exactly what I want to happen when the values of the tiles are calculated as the game goes through the three rules I outlined above. As we step through the rules, I’ll show illustrations and keep a tally. (For convenience, I’m not going to list the non-special tiles, because their values won’t change after the 1st rule is applied, but keep in mind that they are there.)</p>
+
+<h6 id="step-1">Step 1</h6>
+
+<p>Step 1 is easy. Loop through all of the tiles on the completed path and assign a value of 1. This rewards players who used their tiles to help build and complete the path, even if they aren’t reaping benefits of industry.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// special tiles from top left</span>
+<span class="c1">// to bottom left of the image</span>
+<span class="nx">values</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">mine1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by red</span>
+  <span class="nx">house1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by yellow</span>
+  <span class="nx">factory1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by blue</span>
+  <span class="nx">factory2</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// owned by blue</span>
+  <span class="nx">mine2</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// owned by yellow</span>
+  <span class="nx">mine3</span> <span class="o">=</span> <span class="mi">1</span> <span class="c1">// owned by yellow</span>
+  <span class="c1">// all other tiles = 1</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h6 id="step-2">Step 2</h6>
+
+<p>Now we are coming to the pathfinding. We need to find the optimal valid paths from each mine to each factory that it can possibly supply. The following image shows what we would like our pathfinding algorithm to do. The orange lines are leading from the mines to the factories.</p>
+
+<p><img src="/assets/dijkstra/images/mines2.png" alt="Score Example" /></p>
+
+<p>What’s happening, in prose: Yellow owns two mines (<code class="highlighter-rouge">mine2</code> and <code class="highlighter-rouge">mine3</code>), and each mine has a free path to each of the two factories owned by blue (<code class="highlighter-rouge">factory1</code> and <code class="highlighter-rouge">factory2</code>). Good for Yellow! The mine on the right (<code class="highlighter-rouge">mine3</code>) has two valid paths, one of length <code class="highlighter-rouge">3</code> and one of length <code class="highlighter-rouge">6</code>. Keeping in mind that this mine has an initial value of <code class="highlighter-rouge">1</code> from the first scoring rule, this means that the new tile value for <code class="highlighter-rouge">mine3</code> is <code class="highlighter-rouge">1 + 3 + 6 = 10</code>. A pretty nice bonus! Similarly, Yellow’s mine of the left also has two valid paths to factories, one of length <code class="highlighter-rouge">3</code> and one of length <code class="highlighter-rouge">4</code>, bringing this mine tile’s total to <code class="highlighter-rouge">1 + 3 + 4 = 8</code>.</p>
+
+<p>So while it seems that Yellow is reaping a lot of points this turn, we notice that red also owns a mine in the upper left of the path (<code class="highlighter-rouge">mine1</code>). Unfortunately for red, however, Yellow’s house (<code class="highlighter-rouge">house1</code>) is blocking it from connecting to a factory, causing Red’s mine to only be worth the default amount of <code class="highlighter-rouge">1</code> point. In order to add an element of strategic placement and defensive blocking, we want special tiles to only be able to serve as end points and for it to be invalid for paths to pass through them. Sorry Red…</p>
+
+<p>So after the calculations from step 2, the tile values look like this:</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// after step 2: mine-&gt;factory</span>
+<span class="nx">values</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">mine1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by red</span>
+  <span class="nx">house1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by yellow</span>
+  <span class="nx">factory1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by blue</span>
+  <span class="nx">factory2</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// owned by blue</span>
+  <span class="nx">mine2</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">4</span><span class="p">,</span> <span class="c1">// total 8; owned by yellow</span>
+  <span class="nx">mine3</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">6</span> <span class="c1">// total 10; owned by yellow</span>
+  <span class="c1">// all other tiles = 1</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h6 id="step-3">Step 3</h6>
+
+<p>After all of the paths from the mines are calculated and scored, the game then moves on to the factories. Remember, only factories which have been supplied by mines are even eligible for shipping their goods to houses. In our example, however, both factories have been supplied, so both will attempt to draw paths to houses on path. Lucky for Blue, they own both of the factories, and with the 2x multiplier, they should expect a big payout. Let’s see what happens:</p>
+
+<p><img src="/assets/dijkstra/images/factories1.png" alt="Factories Score" /></p>
+
+<p>The upper factory (<code class="highlighter-rouge">factory1</code>) has a nice straight little jot to <code class="highlighter-rouge">house1</code> with a path length of <code class="highlighter-rouge">3</code>, making the value of <code class="highlighter-rouge">factory1</code> <code class="highlighter-rouge">1 + (3*2) = 7</code>. Unfortunately, Blue didn’t choose the best layout, because <code class="highlighter-rouge">factory1</code> is blocking the only possible path from <code class="highlighter-rouge">factory2</code> to <code class="highlighter-rouge">house1</code>, and thus misses quite a few points. Better luck next time, Blue!</p>
+
+<p>So after Step 3:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// after step 3: factory-&gt;house</span>
+<span class="nx">values</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">mine1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by red</span>
+  <span class="nx">house1</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">//owned by yellow</span>
+  <span class="nx">factory1</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="mi">2</span><span class="p">),</span> <span class="c1">// total 7; owned by blue</span>
+  <span class="nx">factory2</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// owned by blue</span>
+  <span class="nx">mine2</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">4</span><span class="p">,</span> <span class="c1">// total 8; owned by yellow</span>
+  <span class="nx">mine3</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">6</span> <span class="c1">// total 10; owned by yellow</span>
+  <span class="c1">// all other tiles = 1</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>If it seems that the restriction on movement through other special tiles is frustrating, one only need to look at one of the strategic possibilities depicted in the next image to understand the positive complexity they add to the game. Players must think ahead about how they want to plan their routes, all while competing with the plans of other players and against the luck of the tile draw.</p>
+
+<p>A clever layout to maximize points (17 for the factory!):</p>
+
+<p><img src="/assets/dijkstra/images/routearound.png" alt="Route Around" /></p>
+
+<p>So now that I’ve shown how the game’s scoring mechanic relies on a pathfinding algorithm, I’ll explain my choice to use Dijkstra’s Algorithm over the several other popular shortest path finding algorithms available.</p>
+
+<h3 id="why-dijkstra-and-not-a">Why Dijkstra and not A*?</h3>
+
+<p><strong>Quick Note on Terminology</strong>: In the literature about pathfinding, the concepts of  <strong>graphs</strong>, <strong>nodes</strong>, and <strong>edges</strong> are used. A graph is an abstract data structure used to analyze the connections between objects. A graph consists of nodes which are connected to each other by edges. In the example of our game, the closed system of a completed path is a graph, each tile within it is a node, and the connections between the tiles are edges.</p>
+
+<p>From the previous section, we saw that the pathfinding algorithm should be able to accomplish the following things:</p>
+
+<ul>
+  <li>Find the shortest possible paths from <strong>one</strong> starting node to <strong>all</strong> possible ending nodes. (e.g. from one mine to all factories).</li>
+  <li>Ensure that special tiles only serve as endpoints on paths and cannot be traveled through.</li>
+</ul>
+
+<p>In looking through the possible shortest path finding algorithms which solve these problems, two stuck out as good candidates: the <a href="https://en.wikipedia.org/wiki/A*_search_algorithm">A* Search algorithm</a>, and <a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm">Dijkstra’s algorithm</a>.</p>
+
+<p>A* seems to be a crowd favorite, at least for certain use-cases. If you poke around on game-development <a href="https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there">forums</a> and <a href="https://gamedevacademy.org/how-to-use-pathfinding-in-phaser/">blogs</a>, you see A* touted everywhere, due mainly to its increased performance over Dijkstra in searching for the shortest path between two given nodes. Whereas Dijkstra’s algorithm needs to analyze every node on a graph, A* uses <a href="https://en.wikipedia.org/wiki/Heuristic_(computer_science">heuristics</a> (basically, educated guesses) to find the shortest path between a beginning and an end node without needing to check every possible node on on entire graph. One stackexchange user writes: “When it comes to pathfinding, A* is pretty much the golden ticket that everyone uses.”</p>
+
+<p>A* is basically an extended version of Dijkstra’s algorithm that uses a system of educated guesses to get to an end node while analyzing as few nodes on the graph as possible, and thus taking less time. This is useful for situations, like pathfinding in a RTS, where one has a clear start node and end node. In our example, however, where one mine might connect to several different factories, we would need to run the A* algorithm several times from the same starting node, which could cause to the algorithm to retrace its steps several times—an inefficiency we would like to avoid if possible.</p>
+
+<p>In debating between using A* and Dijkstra, I opted for Dijkstra because I knew that I would need to reach multiple end nodes from one starting node, and that if I were using A*, I would need to run the algorithm multiple times in order to accomplish this, potentially calculating parts of the same route over and over again. Because Dijkstra’s algorithm—at least, in my implementation of it—can calculate the shortest distance to every node in a graph without needing to have a target or goal node up-front, it seems to make the most sense for my game, wherein one starting node can (and likely will) have multiple semi-overlapping paths to multiple end nodes.</p>
+
+<h3 id="the-code--implementation-in-javascript">The Code — Implementation in Javascript</h3>
+
+<p>Ok, now that we understand how the game works, what goals we want the algorithm to accomplish, and why I choose Dijkstra’s algorithm to accomplish these goals, we can start to look at the code. Everything is written in Javascript (ECMAScript 2016). (Note: Throughout the post, I’ve hidden a lot of the project-specific implementation details or simplified things in cases where it seemed superfluous or confusing. If you want to see the full code all in one place, you can find it <a href="/assets/dijkstra/files/pathfinding.js">here</a>.)</p>
+
+<h6 id="the-nodesonpath-object">The <code class="highlighter-rouge">nodesOnPath</code> Object</h6>
+
+<p>The first thing to understand is the information the rest of the game provides to the pathfinding/scoring mechanism. Every time a player places a tile and ends their turn, the game checks to see if placed tile is on a completed path. (The specifics of this will be for another blog post.) If that path is completed, the game passes an object containing an array called <code class="highlighter-rouge">nodesOnPath</code> to the scoring mechanism. This array is populated with objects representing each tile on the completed path. A typical <code class="highlighter-rouge">nodesOnPath</code> array looks like this:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// nodesOnPath - array of tileObjects</span>
+<span class="p">[</span>
+  <span class="c1">// tileObject</span>
+  <span class="p">{</span>
+    <span class="na">id</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="c1">// unique id of tile</span>
+    <span class="na">neighbors</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span> <span class="c1">// unique ids of neighboring tiles</span>
+    <span class="na">type</span><span class="p">:</span> <span class="s2">"factory"</span><span class="p">,</span> <span class="c1">// tile type "mine", "factory", "house", or null</span>
+    <span class="na">playedBy</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// unique id of player who owns tile</span>
+    <span class="na">x</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="c1">// x coord</span>
+    <span class="na">y</span><span class="p">:</span> <span class="mi">7</span> <span class="c1">// y coord</span>
+  <span class="p">},</span>
+  <span class="c1">// another tileObject</span>
+  <span class="p">{</span>
+    <span class="na">id</span><span class="p">:</span> <span class="mi">7</span><span class="p">,</span>
+    <span class="na">neighbors</span><span class="p">:</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">10</span><span class="p">],</span>
+    <span class="na">type</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+    <span class="c1">// ...</span>
+  <span class="p">}</span>
+<span class="p">]</span>
+</code></pre></div></div>
+
+<p>This array is passed as the only argument to a function called <code class="highlighter-rouge">calcCompletedPathScore</code> which is responsible for taking the information contained in this array, and turning it into point amounts awarded to each player who owns any tiles on the newly completed path. This is accomplished in three steps, each corresponding to one of the steps outlined in Scoring Rules section above.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">calcCompletedPathScore</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// calculates the value of a completed path</span>
+  <span class="c1">// for the various players</span>
+
+  <span class="c1">// step 1: prepare nodesOnPath and set value = 1 for each tile</span>
+  <span class="c1">// ...</span>
+
+  <span class="c1">// steps 2 + 3: use Dijkstra to increase value of special tiles</span>
+  <span class="c1">// ...</span>
+
+  <span class="c1">// final: give player points equal to the value of each tile they own</span>
+  <span class="c1">// ...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h6 id="scoring-step-1">Scoring: Step 1</h6>
+
+<p>Before doing anything related to pathfinding and Dijkstra, the function does a little set-up and sets some initial values. The way that points will be awarded to each player is simple: each tile is given a <code class="highlighter-rouge">value</code> property which is an integer number of points that the player who owns the tile will receive at the end of the scoring calculation. In accordance with Step 1 of our scoring rules, each tile’s default <code class="highlighter-rouge">value</code> property is set to <code class="highlighter-rouge">1</code>, so that each tile on the path is automatically worth <code class="highlighter-rouge">1</code> point.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">calcCompletedPathScore</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// calculates the value of a completed path</span>
+  <span class="c1">// for the various players</span>
+
+  <span class="c1">// used to keep track of which special tiles,</span>
+  <span class="c1">// if any, are on the path</span>
+  <span class="kd">const</span> <span class="nx">specialTiles</span> <span class="o">=</span> <span class="p">{};</span>
+
+  <span class="c1">// for each node on path...</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">nodesOnPath</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// add initial value of tile for score</span>
+    <span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+
+    <span class="c1">// if tile is a special tile</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+
+      <span class="c1">// set loaded and supplying properties</span>
+      <span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">loaded</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+      <span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">supplying</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+
+      <span class="c1">// populate specialTiles object</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">specialTiles</span><span class="p">[</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">type</span><span class="p">])</span> <span class="p">{</span>
+        <span class="nx">specialTiles</span><span class="p">[</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">type</span><span class="p">]</span> <span class="o">=</span> <span class="p">[];</span>
+      <span class="p">}</span>
+      <span class="nx">specialTiles</span><span class="p">[</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">type</span><span class="p">].</span><span class="nx">push</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">]);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="c1">// steps 2 + 3: use Dijkstra to increase value of special tiles</span>
+  <span class="c1">// ...</span>
+
+  <span class="c1">// final: give player points equal to the value of each tile they own</span>
+  <span class="c1">// ...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>We also create a <code class="highlighter-rouge">specialTiles</code> object to be used for keeping track of which special tiles we need to pay attention to on this path, as well as set the <code class="highlighter-rouge">loaded</code> and <code class="highlighter-rouge">supplying</code> properties of each tile, which are used later in Step 3 of the scoring rules, when factories must be ‘loaded’ by mines before they can provide houses with goods.</p>
+
+<p>If the completed path were to contain no special tiles, the scoring process would end here. The final step of the <code class="highlighter-rouge">calcCompletedPathScore</code> function loops through the tiles objects in <code class="highlighter-rouge">nodesOnPath</code> and adds the <code class="highlighter-rouge">value</code> property to the score of whichever player’s id corresponds with the <code class="highlighter-rouge">playedBy</code> property. Without any special tiles, this would always been <code class="highlighter-rouge">1</code> and each player would receive the same number of points as the number of tiles they own on the newly completed path.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">calcCompletedPathScore</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="c1">// step 1: prepare nodesOnPath and set value = 1 for each tile</span>
+  <span class="c1">//...</span>
+
+  <span class="c1">// steps 2 + 3: use Dijkstra to increase value of special tiles</span>
+  <span class="c1">//...</span>
+
+  <span class="c1">// for each node on the path that belongs to player,</span>
+  <span class="c1">// give that player the value of the tile</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">nodesOnPath</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// playerObject has a method addPoints(int)</span>
+    <span class="k">this</span><span class="p">.</span><span class="nx">players</span><span class="p">[</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">playedBy</span><span class="p">].</span><span class="nx">addPoints</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">value</span><span class="p">);</span>
+  <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>It’s the stuff that happens in Steps 2 and 3 of this process which are really of interest to us here in this article, however, so let’s start taking a look at the code which actually implements Dijkstra’s algorithm and assigns value to the special mine, factory, and house tiles.</p>
+
+<h6 id="steps-2-and-3-pathfinding">Steps 2 and 3: Pathfinding</h6>
+
+<p>(Note: My implementation of Dijkstra’s algorithm was heavily inspired by that of Stella Chung’s, which she documents in a blogpost <a href="https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04">here.</a>)</p>
+
+<p>The following is the component of the <code class="highlighter-rouge">calcCompletedPathScore</code> function which deals with pathfinding. I left out most of the nitty-gritty details of validity checking for clarity, but the structure should be clear. You’ll notice that there are two main functions which this component relies on which we haven’t looked at yet: <code class="highlighter-rouge">getDijkstraTree</code> and <code class="highlighter-rouge">getOptimalPathFromTree</code>. We’ll look at the actual functions for each of these more in a second, but for now, just pay attention to where they are being called in the <code class="highlighter-rouge">calcCompletedPathScore</code> function.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">calcCompletedPathScore</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="c1">// step 1: prepare nodesOnPath and set value = 1 for each tile</span>
+  <span class="kd">const</span> <span class="nx">specialTiles</span> <span class="o">=</span> <span class="p">{};</span>
+  <span class="c1">// populate specialTiles...</span>
+  <span class="c1">// ...</span>
+
+  <span class="c1">// steps 2 + 3: use Dijkstra to increase value of special tiles</span>
+  <span class="kd">const</span> <span class="nx">calcSpecialTileBonus</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">specialTiles</span><span class="p">,</span> <span class="nx">startType</span><span class="p">,</span> <span class="nx">endType</span><span class="p">,</span> <span class="nx">bonusAmount</span><span class="p">,</span> <span class="nx">mustBeLoaded</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// check if there is at least one of each startType and endType on path...</span>
+    <span class="c1">// if startType must be loaded, check if it is...</span>
+    <span class="c1">// for each instance of startType on path...</span>
+
+    <span class="kd">let</span> <span class="nx">startId</span> <span class="o">=</span> <span class="c1">// id of tile to be start node</span>
+    <span class="kd">let</span> <span class="nx">dijkstraTree</span> <span class="o">=</span> <span class="nx">getDijkstraTree</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">,</span> <span class="nx">startId</span><span class="p">);</span>
+
+    <span class="c1">// for each valid endType on path...</span>
+
+    <span class="kd">let</span> <span class="nx">finishId</span> <span class="o">=</span> <span class="c1">// id of tile to be end node</span>
+    <span class="kd">let</span> <span class="nx">optimalPath</span> <span class="o">=</span> <span class="nx">getOptimalPathFromTree</span><span class="p">(</span><span class="nx">dijkstraTree</span><span class="p">,</span> <span class="nx">finishId</span><span class="p">);</span>
+
+    <span class="c1">// check path validity...</span>
+
+    <span class="c1">// if valid:</span>
+    <span class="c1">// add path length to value of tile</span>
+    <span class="nx">nodeOnPath</span><span class="p">[</span><span class="nx">startId</span><span class="p">].</span><span class="nx">value</span> <span class="o">+=</span> <span class="nx">optimalPath</span><span class="p">.</span><span class="nx">length</span> <span class="o">*</span> <span class="nx">bonusAmount</span><span class="p">;</span>
+
+    <span class="c1">// if invalid:</span>
+    <span class="c1">// no valid path — unscored</span>
+    <span class="k">return</span>
+  <span class="p">}</span>
+
+  <span class="c1">// mine-&gt;factory, bonus: 1, mustBeLoaded = false</span>
+  <span class="nx">calcSpecialTileBonus</span><span class="p">(</span><span class="nx">specialTiles</span><span class="p">,</span> <span class="s1">'mine'</span><span class="p">,</span> <span class="s1">'factory'</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+  <span class="c1">// factory-&gt;house, bonus: 2, mustBeLoaded = true</span>
+  <span class="nx">calcSpecialTileBonus</span><span class="p">(</span><span class="nx">specialTiles</span><span class="p">,</span> <span class="s1">'factory'</span><span class="p">,</span> <span class="s1">'house'</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+
+
+  <span class="c1">// final: give player points equal to the value of each tile they own</span>
+  <span class="c1">// ...</span>
+
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>For each valid start node, we call a function <code class="highlighter-rouge">getDijkstraTree</code> which will return a data structure that contains the shortest possible paths from the start node to every node on the graph. You’ll notice that we only call this function <em>once</em> per start node. This function is where all the heavy lifting is done, so we want to call it as few times as possible. Then, once the <code class="highlighter-rouge">dijkstraTree</code> has been built, we call a function <code class="highlighter-rouge">getOptimalPathFromTree</code> for each valid end node. This function simply looks up the path between the start node and the given end node in the already built <code class="highlighter-rouge">dijkstraTree</code> object, and stores it as <code class="highlighter-rouge">optimalPath</code>. After checking for validity, the length of <code class="highlighter-rouge">optimalPath</code> is then used to set the value of the tile, which will later be used to assign points to the player.</p>
+
+<p>We wrap all of this up into a function called <code class="highlighter-rouge">calcSpecialTileBonus</code> and then call it twice, once with <code class="highlighter-rouge">'mine'</code> and <code class="highlighter-rouge">'factory'</code> as the startTypes and endTypes, and once with <code class="highlighter-rouge">'factory'</code> and <code class="highlighter-rouge">'house'</code>. The second time, you’ll notice that we include in the arguments a flag that tells us to check if <code class="highlighter-rouge">loaded == true</code> and the modifier <code class="highlighter-rouge">2</code> for calculating the bonus. It seemed like a good idea to abstract this rather than write it twice because 90% of the code would be shared between the two cases.</p>
+
+<h6 id="implementing-dijkstras-algorithm">Implementing Dijkstra’s Algorithm</h6>
+
+<p>Let’s turn now to the actual implementation of the algorithm and look at both functions <code class="highlighter-rouge">getDijkstraTree</code>, <code class="highlighter-rouge">getOptimalPathFromTree</code>, as well as the helper functions which support them.</p>
+
+<p>For Dijkstra’s algorithm, we usually want to keep track of three things:</p>
+<ul>
+  <li>the cost of getting to each node from the start node</li>
+  <li>the chain of previous or parent nodes used in traversing the graph</li>
+  <li>a list of unvisited or unprocessed nodes</li>
+</ul>
+
+<p>My implementation, following <a href="https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04">Stella Chung</a>, uses a list of processed nodes instead of a list of unprocessed nodes, but the end result is the same.</p>
+
+<p>Following the <a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm#Algorithm">algorithm definition</a> on the Wikipedia page, we first create our lists, set the cost of the start node to <code class="highlighter-rouge">0</code> and the unknown costs of the rest of the nodes on the graph to <code class="highlighter-rouge">Infinity</code>:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">getDijkstraTree</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">startId</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// build a tree of costs and parents from startId</span>
+  <span class="c1">// to every other node on the path</span>
+
+  <span class="c1">// create initial objects and lists</span>
+  <span class="kd">const</span> <span class="nx">costs</span> <span class="o">=</span> <span class="p">{};</span>
+  <span class="kd">const</span> <span class="nx">parents</span> <span class="o">=</span> <span class="p">{};</span>
+  <span class="kd">const</span> <span class="nx">processed</span> <span class="o">=</span> <span class="p">[];</span>
+
+  <span class="c1">// set start cost = 0</span>
+  <span class="nx">costs</span><span class="p">[</span><span class="nx">startId</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+  <span class="c1">// set tentative cost for all other nodes to Infinity</span>
+  <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">path</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">id</span> <span class="o">!=</span> <span class="nx">startId</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">costs</span><span class="p">[</span><span class="nx">path</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">id</span><span class="p">]</span> <span class="o">=</span> <span class="kc">Infinity</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="c1">// currentNode = start node</span>
+  <span class="kd">let</span> <span class="nx">currentNode</span> <span class="o">=</span> <span class="nx">getLowestNode</span><span class="p">(</span><span class="nx">costs</span><span class="p">,</span> <span class="nx">processed</span><span class="p">);</span>
+
+  <span class="c1">//...</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>The helper function <code class="highlighter-rouge">getLowestNode</code> on the last line above returns the lowest cost, unprocessed node in the graph. This way, the algorithm is always choosing the optimal node as the next one to process. The first time it is run, it will return the start node, of course, because it is the only non-Infinity node in the <code class="highlighter-rouge">costs</code> object.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">getLowestNode</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">costs</span><span class="p">,</span> <span class="nx">processed</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">costs</span><span class="p">).</span><span class="nx">reduce</span><span class="p">((</span><span class="nx">lowest</span><span class="p">,</span> <span class="nx">node</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">lowest</span> <span class="o">===</span> <span class="kc">null</span> <span class="o">||</span> <span class="nx">costs</span><span class="p">[</span><span class="nx">node</span><span class="p">]</span> <span class="o">&lt;</span> <span class="nx">costs</span><span class="p">[</span><span class="nx">lowest</span><span class="p">])</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">processed</span><span class="p">.</span><span class="nx">includes</span><span class="p">(</span><span class="nx">node</span><span class="p">))</span> <span class="p">{</span>
+        <span class="nx">lowest</span> <span class="o">=</span> <span class="nx">node</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">lowest</span><span class="p">;</span>
+  <span class="p">},</span> <span class="kc">null</span><span class="p">);</span>
+<span class="p">};</span>
+
+</code></pre></div></div>
+
+<p>In the rest of <code class="highlighter-rouge">getDijkstraTree</code>, we perform steps 3–7 of Wikipedia’s algorithm definition.</p>
+
+<p>For each node, we get its current cost (which will be the total thus-far cost required to reach it from the start node) and the costs of its neighbors. Since our graph is just a grid of connected tiles, we use <code class="highlighter-rouge">1</code> for the edge cost for connections to blank tiles and <code class="highlighter-rouge">1001</code> for connections to special tiles. (The game has a limited number of tiles and turns and always will end before a blank path longer than 1000 tiles can be created, so this number is safe.) This ensures that the lowest cost path will always be through blank tiles, and thus implements the rule that paths are not allowed to travel through special tiles.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">getDijkstraTree</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">startId</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">//...</span>
+
+  <span class="c1">// currentNode = start node</span>
+  <span class="kd">let</span> <span class="nx">currentNode</span> <span class="o">=</span> <span class="nx">getLowestNode</span><span class="p">(</span><span class="nx">costs</span><span class="p">,</span> <span class="nx">processed</span><span class="p">);</span>
+
+  <span class="c1">// as long as there are nodes which are not in processed...</span>
+  <span class="k">while</span> <span class="p">(</span><span class="nx">currentNode</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">cost</span> <span class="o">=</span> <span class="nx">costs</span><span class="p">[</span><span class="nx">currentNode</span><span class="p">];</span> <span class="c1">// cost of current node</span>
+    <span class="kd">let</span> <span class="nx">children</span> <span class="o">=</span> <span class="nx">getNodeById</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">currentNode</span><span class="p">).</span><span class="nx">neighbors</span><span class="p">;</span>
+    <span class="kd">let</span> <span class="nx">childrenCosts</span> <span class="o">=</span> <span class="nx">getCostsOfNeighbors</span><span class="p">(</span><span class="nx">path</span><span class="p">,</span> <span class="nx">children</span><span class="p">);</span> <span class="c1">// 1 or 1001</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">n</span> <span class="k">in</span> <span class="nx">childrenCosts</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">let</span> <span class="nx">newCost</span> <span class="o">=</span> <span class="nx">cost</span> <span class="o">+</span> <span class="nx">childrenCosts</span><span class="p">[</span><span class="nx">n</span><span class="p">];</span> <span class="c1">// cost of current node + travel</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">costs</span><span class="p">[</span><span class="nx">n</span><span class="p">]</span> <span class="o">&gt;</span> <span class="nx">newCost</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">costs</span><span class="p">[</span><span class="nx">n</span><span class="p">]</span> <span class="o">=</span> <span class="nx">newCost</span><span class="p">;</span>
+        <span class="nx">parents</span><span class="p">[</span><span class="nx">n</span><span class="p">]</span> <span class="o">=</span> <span class="nx">currentNode</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">// add currentNode to processed list after processing</span>
+    <span class="nx">processed</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">currentNode</span><span class="p">);</span>
+
+    <span class="c1">// get lowest, unprocessed node</span>
+    <span class="nx">currentNode</span> <span class="o">=</span> <span class="nx">getLowestNode</span><span class="p">(</span><span class="nx">costs</span><span class="p">,</span> <span class="nx">processed</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="c1">// return path, costs, and parents for use with getOptimalPathFromTree</span>
+  <span class="k">return</span> <span class="p">{</span><span class="nx">path</span><span class="p">,</span> <span class="nx">costs</span><span class="p">,</span> <span class="nx">parents</span><span class="p">};</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>(Note: <code class="highlighter-rouge">getNodeById</code> and <code class="highlighter-rouge">getCostsOfNeighbors</code> are just helper functions which respectively use the node’s unique id to access its <code class="highlighter-rouge">neighbors</code> property and assign a cost of either <code class="highlighter-rouge">1</code> or <code class="highlighter-rouge">1001</code> depending on whether the neighbor is a blank or special tile.)</p>
+
+<p>Once we have the costs of the current node and all of its neighbors, we tentatively add the cost of the current node to the cost of each of its neighbors, and check whether the currently stored lowest cost for each neighbor node is higher than the tentative one we just calculated. If the already stored cost <em>is</em> higher, that means we just found a less-costly way to reach this node from the start node, so we store that instead and record the current node as the ‘parent’ of the neighbor node we just updated.</p>
+
+<p>Once all the neighbors of the current node have been checked out, we then mark the current node as processed, meaning that it will never be visited again, and get a new current node: whichever has the lowest cost from start and has yet to be processed. This loop is completed until every node on the graph has been processed. What we are left with are two objects: <code class="highlighter-rouge">costs</code> and <code class="highlighter-rouge">parents</code>, which we return and designate as <code class="highlighter-rouge">dijkstraTree</code> in our <code class="highlighter-rouge">calcCompletedPathScore</code> function.</p>
+
+<p>Now that we have a calculated tree containing the costs to each node from the start node, we can use it to find the optimal path to each of the end nodes that we are interested in by using <code class="highlighter-rouge">getOptimalPathFromTree</code>. We pass it the tree that we calculated in <code class="highlighter-rouge">getDijkstraTree</code> as well as the unique id of the end node that we are interested in finding the optimal path to.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">getOptimalPathFromTree</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">tree</span><span class="p">,</span> <span class="nx">finishId</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="c1">// return array of actual nodes on the optimal path</span>
+  <span class="kd">let</span> <span class="nx">optimalPath</span> <span class="o">=</span> <span class="p">[</span><span class="nx">getNodeById</span><span class="p">(</span><span class="nx">tree</span><span class="p">.</span><span class="nx">path</span><span class="p">,</span> <span class="nx">finishId</span><span class="p">)];</span>
+  <span class="kd">let</span> <span class="nx">parent</span> <span class="o">=</span> <span class="nx">tree</span><span class="p">.</span><span class="nx">parents</span><span class="p">[</span><span class="nx">finishId</span><span class="p">];</span>
+  <span class="k">while</span> <span class="p">(</span><span class="nx">parent</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">optimalPath</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">getNodeById</span><span class="p">(</span><span class="nx">tree</span><span class="p">.</span><span class="nx">path</span><span class="p">,</span> <span class="nx">parent</span><span class="p">));</span>
+    <span class="nx">parent</span> <span class="o">=</span> <span class="nx">tree</span><span class="p">.</span><span class="nx">parents</span><span class="p">[</span><span class="nx">parent</span><span class="p">];</span>
+  <span class="p">}</span>
+  <span class="nx">optimalPath</span><span class="p">.</span><span class="nx">reverse</span><span class="p">();</span>
+
+  <span class="c1">// return int of the target Score</span>
+  <span class="c1">// used to check validity. if &gt;2000,</span>
+  <span class="c1">// then invalid</span>
+  <span class="kd">const</span> <span class="nx">targetScore</span> <span class="o">=</span> <span class="nx">tree</span><span class="p">.</span><span class="nx">costs</span><span class="p">[</span><span class="nx">finishId</span><span class="p">];</span>
+
+  <span class="k">return</span> <span class="p">{</span><span class="nx">optimalPath</span><span class="p">,</span> <span class="nx">targetScore</span><span class="p">};</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>The function starts with the end node, gets its parent node, and pushes it to an an array <code class="highlighter-rouge">optimalPath</code>. It then gets the parent node of this node, and so forth, until it retraces its way back to the start node, which has no parent. In doing this, it recreates the path taken from the start node to the end node. It returns this path, along with the final score of this final node, designated as <code class="highlighter-rouge">targetScore</code>. Because we set connections to special tiles to be <code class="highlighter-rouge">1001</code>, any targetScore higher than <code class="highlighter-rouge">2000</code> must indicate a path that passes through another special tile, and thus is invalid. We check for this in <code class="highlighter-rouge">calcCompletedPathScore</code>.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">calcSpecialTileBonus</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">specialTiles</span><span class="p">,</span> <span class="nx">startType</span><span class="p">,</span> <span class="nx">endType</span><span class="p">,</span> <span class="nx">bonusAmount</span><span class="p">,</span> <span class="nx">mustBeLoaded</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+
+  <span class="c1">// check if there is at least one of each startType and endType on path...</span>
+  <span class="c1">// if startType must be loaded, check if it is...</span>
+  <span class="c1">// for each instance of startType on path...</span>
+
+  <span class="kd">let</span> <span class="nx">startId</span> <span class="o">=</span> <span class="p">;</span><span class="c1">// id of tile to be start node</span>
+  <span class="kd">let</span> <span class="nx">dijkstraTree</span> <span class="o">=</span> <span class="nx">getDijkstraTree</span><span class="p">(</span><span class="nx">nodesOnPath</span><span class="p">,</span> <span class="nx">startId</span><span class="p">);</span>
+
+  <span class="c1">// for each valid endType on path...</span>
+
+  <span class="kd">let</span> <span class="nx">finishId</span> <span class="o">=</span> <span class="c1">// id of tile to be end node</span>
+  <span class="kd">let</span> <span class="nx">optimalPath</span> <span class="o">=</span> <span class="nx">getOptimalPathFromTree</span><span class="p">(</span><span class="nx">dijkstraTree</span><span class="p">,</span> <span class="nx">finishId</span><span class="p">);</span>
+
+  <span class="c1">// check path validity...</span>
+
+  <span class="c1">// if greater than 2000, then invalid</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">optimalPath</span><span class="p">.</span><span class="nx">targetScore</span> <span class="o">&lt;</span> <span class="mi">2000</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// add path length to value of tile</span>
+    <span class="nx">nodeOnPath</span><span class="p">[</span><span class="nx">startId</span><span class="p">].</span><span class="nx">value</span> <span class="o">+=</span> <span class="nx">optimalPath</span><span class="p">.</span><span class="nx">length</span> <span class="o">*</span> <span class="nx">bonusAmount</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="c1">//...</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>If the optimal path returned by <code class="highlighter-rouge">getOptimalPathFromTree</code> is valid, we then use the length of this path (along with the <code class="highlighter-rouge">*2</code> modifier in the case of factories and houses) to change the value of the special tiles on the completed path, and thus to allow proper score calculation based on the rules we set out to implement.</p>
+
+<h3 id="conclusion">Conclusion</h3>
+
+<p>I hope that you were able to see from this example what it looks like to implement Dijkstra’s (or any other shortest path finding algorithm) in a grid- or tile-based game like the one I’ve been developing as well as some of the design decisions that went into choosing this algorithm. If I were building a more dynamic, performance intensive game like a real-time strategy or tower defense game, I would probably use A* or some version of it.</p>
+
+<p>Although I tried to keep my mind bent towards efficiency while building this, I’m sure there are plenty of places where it could be improved. Many suggest that Dijkstra’s algorithm should be implemented with a <a href="https://en.wikipedia.org/wiki/Fibonacci_heap">Fibonacci heap</a>, but due to the relatively small sizes of the graphs that my game is capable of generating, it seemed to be far more trouble than it would be worth to implement this. But perhaps for a future blog post!</p>
+
+<p>If there is anything that I missed or could improve, please reach out to me at <a href="mailto:jbierfeldt@gmail.com">jbierfeldt@gmail.com</a> and let me know!</p>
+
+<h6 id="inspiration-and-resources">Inspiration and Resources:</h6>
+<ul>
+  <li><a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm">https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm</a></li>
+  <li><a href="https://en.wikipedia.org/wiki/A-star_search_algorithm">https://en.wikipedia.org/wiki/A-star_search_algorithm</a></li>
+  <li><a href="https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04">https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04</a></li>
+  <li><a href="https://en.wikipedia.org/wiki/Maze_solving_algorithm">https://en.wikipedia.org/wiki/Maze_solving_algorithm</a></li>
+  <li><a href="https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there">https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there</a></li>
+  <li><a href="https://mitpress.mit.edu/books/introduction-algorithms">https://mitpress.mit.edu/books/introduction-algorithms</a></li>
+</ul>
+
+  </div><a class="u-url" href="/2018/05/01/implementing-dijkstra.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Jackson Bierfeldt Developer Blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Jackson Bierfeldt Developer Blog</li><li><a class="u-email" href="mailto:jbierfeldt@gmail.com">jbierfeldt@gmail.com</a></li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/jbierfeldt"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">jbierfeldt</span></a></li><li><a href="https://www.twitter.com/jbierfeldt"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">jbierfeldt</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Developer blog for Jackson Bierfeldt. Posts about current projects, ideas, and unanswered questions.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
