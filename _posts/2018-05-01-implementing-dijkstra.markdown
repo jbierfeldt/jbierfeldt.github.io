@@ -1,14 +1,14 @@
 ---
 layout: post
-title: "Using Dijkstra's Algorithm for Score Calculation in a Tile-based Game"
+title: "Why and how I Used Dijkstra's Algorithm for Score Calculation in a Tile-based Javascript Game"
 date: "2018-05-01 14:54"
 ---
 
-Recently, I've been building a multiplayer tile-laying game inspired by games like [Carcassonne](<https://en.wikipedia.org/wiki/Carcassonne_board_game>) and [Settlers of Catan](https://en.wikipedia.org/wiki/Catan). I'll soon have some other blog posts about the game and some of the technologies and architectures I'm building it with, but today I'm going to walkthrough and illustrate how I used [Dijkstra's Algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) to implement the scoring component of the game. Since there are already [so](https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work) [many](https://www.youtube.com/watch?v=NHZr6P1csiY) [good](https://www.manning.com/books/grokking-algorithms) [resources](https://mitpress.mit.edu/books/introduction-algorithms) explaining what Dijkstra's algorithm is and how it works, I'm writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.
+Recently, I've been building a multiplayer tile-laying game inspired by games like [Carcassonne](<https://en.wikipedia.org/wiki/Carcassonne_board_game>) and [Settlers of Catan](https://en.wikipedia.org/wiki/Catan). I'll soon have some other blog posts about the game and some of the technologies and design patterns I'm using to build it, but today I'm going to walk through and illustrate how and why I used [Dijkstra's Algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) to implement the scoring component of the game. Since there are already [so](https://stackoverflow.com/questions/2856670/why-does-dijkstras-algorithm-work) [many](https://www.youtube.com/watch?v=NHZr6P1csiY) [good](https://www.manning.com/books/grokking-algorithms) [resources](https://mitpress.mit.edu/books/introduction-algorithms) explaining what Dijkstra's algorithm is and how it works, I'm writing this for somebody who already understands the basic concepts involved, and who would like to see a real-life implementation of it in a tile-based Javascript game.
 
 ## The Game — Rules and Objectives
 
-To begin, I'm going to explain the game, so as to motivate why I even needed a pathfinding algorithm in the first place. If all you want to see is my implementation, feel free to skip to the next section.
+To begin, I'm going to explain the game, so as to motivate why I even needed a pathfinding algorithm in the first place. If all you want to see is my implementation, feel free to skip to the last section.
 
 ### Turns and Tile Placement
 
@@ -22,7 +22,7 @@ Like Carcassonne, the game begins with a single tile on the board. When it is ea
 
 Tiles can either be a simple road tiles which are used to connect other tiles, or they can be *special tiles* which includes one of three game pieces on them: a mine, a factory, or a house. The basic logic of the game is as follows: **Mines provide factories with materials, factories turn these materials into goods, which they then ship to houses for consumption.**
 
-Players *own* the tiles that they place, including any special tiles. This is indicated (at least right now in this mock-up stage) by little badges with the player's color on the bottom left of the placed tile. (See next image for example.) As tiles are laid and the board expands, paths are formed and eventually completed. Only after a path is completed is it scored, and players receive points based on the value of the tiles that they own.
+Players *own* the tiles that they place, including any special tiles. This is indicated (at least right now in this mock-up stage) by little badges with the player's color on the bottom left of the placed tile. (See next image for example.) As tiles are laid and the board expands, paths of connected roads are formed and eventually completed. Only after a path is completed is it scored, and players receive points based on the value of the tiles that they own. We'll talk about the tile valuation process a little later—that's where the pathfinding algorithm comes in.
 
 ![Board Example](/assets/dijkstra/images/completed_path.png)
 
@@ -33,11 +33,13 @@ A path is scored whenever it gets *completed*, meaning that there is no possibil
 
 *   Each tile on a completed path is automatically worth ``1`` point.
 *   Each mine *which is connected to a factory* is worth a number of points equal to the length of the shortest possible path between it and the factories that it supplies. If it supplies multiple factories, the distances of these paths are summed. A mine which is not connected to at least one factory is worth the default ``1`` point.
-*   Each factory *which is supplied by a mine **and** which is connected to a house* is worth a number of points equal to the length of the shortest possible path between it and the houses that it supplies **multiplied by**``2``. If a factory is neither supplied by a mine nor connected to at least one house, it is only worth the default ``1`` point.
+*   Each factory *which is supplied by a mine **and** which is connected to a house* is worth a number of points equal to the length of the shortest possible path between it and the houses that it supplies **multiplied by**``2``. If it supplies multiple houses, the distances of these paths are summed. If a factory is neither supplied by a mine nor connected to at least one house, it is only worth the default ``1`` point.
+
+Basically: normal tiles are worth ``1`` point, mines are worth however long the paths connecting them to factories are, and factories are worth however long the paths connecting them to houses are, times 2, becuase they have to be loaded by mines first, which is harder to do.
 
 Since the majority of the scoring is ultimately based on the length of the paths between the special tiles, it is important that these paths be calculated thoroughly. A player should not receive extra points for their path just because a random-walk algorithm was used and took the long-route to get there. This, along with the complexity of some of the rules of calculating the paths that we will see in the next section, underscore my decision to use a shortest path finding algorithm in implementing the scoring logic of the game.
 
-But why Dijkstra and not [A*](https://en.wikipedia.org/wiki/A*_search_algorithm) or [other](https://en.wikipedia.org/wiki/Shortest_path_problem) [popular](https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm) [shortest](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) [distance](https://www.geeksforgeeks.org/johnsons-algorithm/) [algorithms](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm)? I'll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game.
+But why Dijkstra and not [A*](https://en.wikipedia.org/wiki/A*_search_algorithm) or [other](https://en.wikipedia.org/wiki/Shortest_path_problem) [popular](https://stackoverflow.com/questions/1846836/the-best-shortest-path-algorithm) [shortest](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) [distance](https://www.geeksforgeeks.org/johnsons-algorithm/) [algorithms](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm)? I'll come back to this decision after filling out some details of what exactly I wanted the algorithm to do in my game. The best way to do that is by walking through a concrete example of how exactly we want a scoring event to play out.
 
 
 
@@ -65,13 +67,13 @@ values = {
 
 #### Step 2
 
-Now we are coming to the pathfinding. We need to find the optimal valid paths from each mine to each factory that it can possibly supply. The following image shows what we would like our pathfinding algorithm to do. The orange lines are leading from the mines to the factories.
+Now we come to the pathfinding. We need to find the optimal valid paths from each mine to each factory that it can possibly supply. What makes a path valid? Well, we want it to extend from one special tile (e.g. a mine) to its goal special tile (e.g. a factory) *without going through any other special tiles*. In other words, we only want special tiles to be able to serve as endpoints. This makes placement more strategic. The following image shows what we would like our pathfinding algorithm to do. The orange lines represent the paths being drawn from the mines to the factories.
 
 ![Score Example](/assets/dijkstra/images/mines2.png)
 
-What's happening, in prose: Yellow owns two mines (``mine2`` and ``mine3``), and each mine has a free path to each of the two factories owned by blue (``factory1`` and ``factory2``). Good for Yellow! The mine on the right (``mine3``) has two valid paths, one of length ``3`` and one of length ``6``. Keeping in mind that this mine has an initial value of ``1`` from the first scoring rule, this means that the new tile value for ``mine3`` is `` 1 + 3 + 6 = 10``. A pretty nice bonus! Similarly, Yellow's mine of the left also has two valid paths to factories, one of length ``3`` and one of length ``4``, bringing this mine tile's total to ``1 + 3 + 4 = 8``.
+What's happening, in prose: Yellow owns two mines (``mine2`` and ``mine3``), and each mine has a free path to each of the two factories owned by blue (``factory1`` and ``factory2``). The mine on the right (``mine3``) has two valid paths, one of length ``3`` and one of length ``6``. Keeping in mind that this mine has an initial value of ``1`` from the first scoring rule, this means that the new tile value for ``mine3`` is `` 1 + 3 + 6 = 10``. A pretty nice bonus! Similarly, Yellow's mine of the left also has two valid paths to factories, one of length ``3`` and one of length ``4``, bringing this mine tile's total to ``1 + 3 + 4 = 8``.
 
-So while it seems that Yellow is reaping a lot of points this turn, we notice that red also owns a mine in the upper left of the path (``mine1``). Unfortunately for red, however, Yellow's house (``house1``) is blocking it from connecting to a factory, causing Red's mine to only be worth the default amount of ``1`` point. In order to add an element of strategic placement and defensive blocking, we want special tiles to only be able to serve as end points and for it to be invalid for paths to pass through them. Sorry Red...
+So while it seems that Yellow is reaping a lot of points this turn, we notice that Red also owns a mine in the upper left of the path (``mine1``). Unfortunately for Red, however, Yellow's house (``house1``) is blocking it from connecting to a factory, causing Red's mine to only be worth the default amount of ``1`` point. In order to add an element of strategic placement and defensive blocking, we want special tiles to only be able to serve as end points and for it to be invalid for paths to pass through them. So this path doesn't get completed. Sorry Red...
 
 So after the calculations from step 2, the tile values look like this:
 ```javascript
@@ -93,7 +95,7 @@ After all of the paths from the mines are calculated and scored, the game then m
 
 ![Factories Score](/assets/dijkstra/images/factories1.png)
 
-The upper factory (``factory1``) has a nice straight little jot to ``house1`` with a path length of ``3``, making the value of ``factory1`` ``1 + (3*2) = 7``. Unfortunately, Blue didn't choose the best layout, because ``factory1`` is blocking the only possible path from ``factory2`` to ``house1``, and thus misses quite a few points. Better luck next time, Blue!
+The upper factory (``factory1``) has a nice straight little jot to ``house1`` with a path length of ``3``, making the value of ``factory1`` ``1 + (3*2) = 7``. Unfortunately, Blue didn't choose the best layout, because ``factory1`` is blocking the only possible path from ``factory2`` to ``house1``, and thus misses quite a few points.
 
 So after Step 3:
 
@@ -112,7 +114,7 @@ values = {
 
 If it seems that the restriction on movement through other special tiles is frustrating, one only need to look at one of the strategic possibilities depicted in the next image to understand the positive complexity they add to the game. Players must think ahead about how they want to plan their routes, all while competing with the plans of other players and against the luck of the tile draw.
 
-A clever layout to maximize points (17 for the factory!):
+A clever layout to maximize points. Because the *shortest* path from the factory to the house passes through the mine, making it invalid, the shortest *valid* path is longer, leading to more points (17 for the factory!):
 
 ![Route Around](/assets/dijkstra/images/routearound.png)
 
@@ -122,14 +124,14 @@ So now that I've shown how the game's scoring mechanic relies on a pathfinding a
 
 **Quick Note on Terminology**: In the literature about pathfinding, the concepts of  **graphs**, **nodes**, and **edges** are used. A graph is an abstract data structure used to analyze the connections between objects. A graph consists of nodes which are connected to each other by edges. In the example of our game, the closed system of a completed path is a graph, each tile within it is a node, and the connections between the tiles are edges.
 
-From the previous section, we saw that the pathfinding algorithm should be able to accomplish the following things:
+From the previous section, I showed that the pathfinding algorithm should be able to accomplish the following things:
 
 *   Find the shortest possible paths from **one** starting node to **all** possible ending nodes. (e.g. from one mine to all factories).
 *   Ensure that special tiles only serve as endpoints on paths and cannot be traveled through.
 
 In looking through the possible shortest path finding algorithms which solve these problems, two stuck out as good candidates: the [A* Search algorithm](https://en.wikipedia.org/wiki/A*_search_algorithm), and [Dijkstra's algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm).
 
-A\* seems to be a crowd favorite, at least for certain use-cases. If you poke around on game-development [forums](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) and [blogs](https://gamedevacademy.org/how-to-use-pathfinding-in-phaser/), you see A\* touted everywhere, due mainly to its increased performance over Dijkstra in searching for the shortest path between two given nodes. Whereas Dijkstra's algorithm needs to analyze every node on a graph, A\* uses [heuristics](<https://en.wikipedia.org/wiki/Heuristic_(computer_science>) (basically, educated guesses) to find the shortest path between a beginning and an end node without needing to check every possible node on on entire graph. One stackexchange user writes: "When it comes to pathfinding, A\* is pretty much the golden ticket that everyone uses."
+A\* seems to be a crowd favorite, at least for certain use-cases. If you poke around on game-development [forums](https://gamedev.stackexchange.com/questions/1/what-path-finding-algorithms-are-there) and [blogs](https://gamedevacademy.org/how-to-use-pathfinding-in-phaser/), you see A\* prized everywhere, due mainly to its increased performance over Dijkstra in searching for the shortest path between two given nodes. Whereas Dijkstra's algorithm needs to analyze every node on a graph, A\* uses [heuristics](<https://en.wikipedia.org/wiki/Heuristic_(computer_science>) (basically, educated guesses) to find the shortest path between a beginning and an end node without needing to check every possible node on on entire graph. One stackexchange user writes: "When it comes to pathfinding, A\* is pretty much the golden ticket that everyone uses."
 
 A\* is basically an extended version of Dijkstra's algorithm that uses a system of educated guesses to get to an end node while analyzing as few nodes on the graph as possible, and thus taking less time. This is useful for situations, like pathfinding in a RTS, where one has a clear start node and end node. In our example, however, where one mine might connect to several different factories, we would need to run the A* algorithm several times from the same starting node, which could cause to the algorithm to retrace its steps several times—an inefficiency we would like to avoid if possible.
 
@@ -138,7 +140,7 @@ In debating between using A\* and Dijkstra, I opted for Dijkstra because I knew 
 
 ### The Code — Implementation in Javascript
 
-Ok, now that we understand how the game works, what goals we want the algorithm to accomplish, and why I choose Dijkstra's algorithm to accomplish these goals, we can start to look at the code. Everything is written in Javascript (ECMAScript 2016). (Note: Throughout the post, I've hidden a lot of the project-specific implementation details or simplified things in cases where it seemed superfluous or confusing. If you want to see the full code all in one place, you can find it [here](</assets/dijkstra/files/pathfinding.js>).)
+Ok, now that we hopefully understand how the game works, what goals we want the algorithm to accomplish, and why I choose Dijkstra's algorithm to accomplish these goals, we can start to look at the code. Everything is written in Javascript (ECMAScript 2016). (Note: Throughout the post, I've hidden a lot of the project-specific implementation details or simplified things in cases where it seemed superfluous or confusing. If you want to see the full code all in one place, you can find it [here](</assets/dijkstra/files/pathfinding.js>).)
 
 #### The ``nodesOnPath`` Object
 
@@ -253,7 +255,7 @@ It's the stuff that happens in Steps 2 and 3 of this process which are really of
 
 #### Steps 2 and 3: Pathfinding
 
-(Note: My implementation of Dijkstra's algorithm was heavily inspired by that of Stella Chung's, which she documents in a blogpost [here.](https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04))
+(Note: My implementation of Dijkstra's algorithm was heavily inspired by that of Stella Chung's, which she documents in a blog post [here.](https://hackernoon.com/how-to-implement-dijkstras-algorithm-in-javascript-abdfd1702d04))
 
 The following is the component of the ``calcCompletedPathScore`` function which deals with pathfinding. I left out most of the nitty-gritty details of validity checking for clarity, but the structure should be clear. You'll notice that there are two main functions which this component relies on which we haven't looked at yet: ``getDijkstraTree`` and ``getOptimalPathFromTree``. We'll look at the actual functions for each of these more in a second, but for now, just pay attention to where they are being called in the ``calcCompletedPathScore`` function.
 
@@ -311,7 +313,7 @@ We wrap all of this up into a function called ``calcSpecialTileBonus`` and then 
 
 Let's turn now to the actual implementation of the algorithm and look at both functions ``getDijkstraTree``, ``getOptimalPathFromTree``, as well as the helper functions which support them.
 
-For Dijkstra's algorithm, we usually want to keep track of three things:
+For Dijkstra's algorithm, we want to keep track of three things:
 *   the cost of getting to each node from the start node
 *   the chain of previous or parent nodes used in traversing the graph
 *   a list of unvisited or unprocessed nodes
@@ -400,7 +402,7 @@ const getDijkstraTree = function(path, startId) {
 };
 ```
 
-(Note: ``getNodeById`` and ``getCostsOfNeighbors`` are just helper functions which respectively use the node's unique id to access its ``neighbors`` property and assign a cost of either ``1`` or ``1001`` depending on whether the neighbor is a blank or special tile.)
+(Note: ``getNodeById`` and ``getCostsOfNeighbors`` are just helper functions which respectively use the node's unique id to access its ``neighbors`` property and assign a cost of either ``1`` or ``1001`` depending on whether the neighbor is a blank or special tile. You can see them [here](</assets/dijkstra/files/pathfinding.js>).)
 
 Once we have the costs of the current node and all of its neighbors, we tentatively add the cost of the current node to the cost of each of its neighbors, and check whether the currently stored lowest cost for each neighbor node is higher than the tentative one we just calculated. If the already stored cost *is* higher, that means we just found a less-costly way to reach this node from the start node, so we store that instead and record the current node as the 'parent' of the neighbor node we just updated.
 
