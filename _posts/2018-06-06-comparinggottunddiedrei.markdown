@@ -90,7 +90,7 @@ Here are both images side by side, for comparison:
     Viel Land u. Leut' an mich gebracht.<br /><br />
 
     Bauer:<br />
-    Ha Ha!<br />
+    Ha! Ha!<br />
     Wann Gott und ich nichts tät',<br />
     Ihr Beide nichts zu essen hätt.
   </code>
