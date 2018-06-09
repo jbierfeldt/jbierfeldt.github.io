@@ -13,7 +13,7 @@ One particular work caught my eye, a painting from an unknown artist created aro
 <div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; border-bottom: 2px dotted lightgrey; padding-top: 10px">
   <div style="width: 50%">
     <code language="">
-      Clerus:<br />
+      Klerus:<br />
       Ich mit meiner Lehr',<br />
       Viel Leut zu Gott bekehr'.<br /><br />
 
@@ -65,7 +65,7 @@ Here are both images side by side, for comparison:
 <div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; border-bottom: 2px dotted lightgrey; padding-top: 10px; padding-bottom: 10px;">
   <div style="width: 50%">
     <code language="">
-      Clerus:<br />
+      Klerus:<br />
       Ich mit meiner Lehr',<br />
       Viel Leut zu Gott bekehr'.<br /><br />
 
@@ -81,7 +81,7 @@ Here are both images side by side, for comparison:
   </div>
   <div style="width: 50%">
   <code language="">
-    Clerus:<br />
+    Klerus:<br />
     Ich mit meiner Lehr',<br />
     Viel Leut' zu Gott bekehr<br /><br />
 
