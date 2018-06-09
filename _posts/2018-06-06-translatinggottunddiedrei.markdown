@@ -10,8 +10,8 @@ One particular work caught my eye, a painting from the early-19th century create
 
 ![Museum](/assets/trans-gott-die-drei/images/museum.jpg)
 
-<div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; ">
-  <div style="width: 50%; padding: 10px">
+<div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; border-bottom: 2px dotted lightgrey; padding-top: 10px">
+  <div style="width: 50%">
     <code language="">
       Clerus:<br />
       Ich mit meiner Lehr',<br />
@@ -27,7 +27,7 @@ One particular work caught my eye, a painting from the early-19th century create
       Ihr beide nichts zu essen hätt'.
     </code>
   </div>
-  <div style="width: 50%; padding: 10px">
+  <div style="width: 50%">
   <code language="">
     Clergy:<br />
     I, with my religious theory,<br />
@@ -43,8 +43,8 @@ One particular work caught my eye, a painting from the early-19th century create
     No food that's 'pon your table'd grow.<br /><br />
   </code>
   </div>
-  <div style="width: 100%; border-bottom: 2px dotted lightgrey; margin: 10px; font-style: italic">
-  Special thanks to [Zeke Honegger](https://concerningwords.wordpress.com/) for working on this translation with me. He's writing a blog post about the translation process which I'll include here after it's published.
+  <div style="width: 100%; padding: 10px; font-style: italic">
+  Special thanks to <a href="https://concerningwords.wordpress.com/">Zeke Honegger</a> for working on this translation with me. He's writing a blog post about the translation process which I'll include here after it's published.
   </div>
 </div>
 
