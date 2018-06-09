@@ -62,8 +62,8 @@ Here are both images side by side, for comparison:
 
 ![Combined](/assets/trans-gott-die-drei/images/combined2.jpg)
 
-<div style="display: flex; flex-wrap: wrap;">
-  <div style="width: 50%; padding: 10px">
+<div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; border-bottom: 2px dotted lightgrey; padding-top: 10px; padding-bottom: 10px;">
+  <div style="width: 50%">
     <code language="">
       Clerus:<br />
       Ich mit meiner Lehr',<br />
@@ -79,7 +79,7 @@ Here are both images side by side, for comparison:
       Ihr beide nichts zu essen hätt'.
     </code>
   </div>
-  <div style="width: 50%; padding: 10px">
+  <div style="width: 50%">
   <code language="">
     Clerus:<br />
     Ich mit meiner Lehr',<br />
