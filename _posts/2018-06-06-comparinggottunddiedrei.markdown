@@ -1,14 +1,14 @@
 ---
 layout: post
 title: "Comparing Two Versions of \"Gott und die drei Geburtsstände - Klerus, Adel und Bauern\""
-date: "2018-06-06 18:42:55 +0200"
+date: "2018-06-09 18:42:55 +0200"
 ---
 
 A few days ago, I decided on a whim to visit the Austrian [Volkskunde Museum](https://www.volkskundemuseum.at/jart/prj3/volkskundemuseum/main.jart?content-id=1377520150937&rel=de) in Vienna. (The English translation of their website calls the museum: "The Austrian Museum of Folk Life and Folk Art"). The museum hosts a magnificent collection of furniture, tools, paintings, maps, models, sculptures and every other conceivable form of art, all created by Austrian peasants, farmers, and craftspeople, mostly from the 17th, 18th, and 19th centuries. The collection is designed to give a glimpse into the lives (both material and psychological) of the pre-industrial societies that created these works of art and design. Go check it out if you can.
 
 One particular work caught my eye, a painting from the early-19th century created somewhere in the west of Austria. Since I couldn't find any placards or threatening iconography expressly forbidding me from taking a picture, I did:
 
-![Museum](/assets/trans-gott-die-drei/images/museum.jpg)
+![Museum](/assets/comp-gott-die-drei/images/museum.jpg)
 
 <div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; border-bottom: 2px dotted lightgrey; padding-top: 10px">
   <div style="width: 50%">
@@ -54,13 +54,13 @@ The painting turns out to be a [genre painting](https://en.wikipedia.org/wiki/Es
 
 While doing some cursory research online, I came across [another version](http://www.auktion-innsbruck.at/product/2149/23) of the same painting, remarkably similar, but from later in the 19th century, 1880, and attributed to an artist in Innsbruck named Balthasar Waltl. This version of the painting has a title listed along with it: "Gott und die drei Geburtsstände - Klerus, Adel und Bauern" ("God and the three estates — Clergy, Nobility, and Peasantry").
 
-![Auction](/assets/trans-gott-die-drei/images/auction.jpg)
+![Auction](/assets/comp-gott-die-drei/images/auction.jpg)
 
 All the essential symbolic features of the image are the same, just painted in a slightly different style, with the exception of the addition of a book in the hand of the clergyman. Aside from this, the most notable differences I can discern are in some of the colors in the clothing of the clergyman and the peasant, which I would love to be able to explain, but unfortunately can't. If someone reading this knows anything about why these colors might have changed from version to version, please drop me a line.
 
 Here are both images side by side, for comparison:
 
-![Combined](/assets/trans-gott-die-drei/images/combined2.jpg)
+![Combined](/assets/comp-gott-die-drei/images/combined.jpg)
 
 <div style="display: flex; flex-wrap: wrap; border-top: 2px dotted lightgrey; border-bottom: 2px dotted lightgrey; padding-top: 10px; padding-bottom: 10px;">
   <div style="width: 50%">
@@ -109,7 +109,7 @@ Interestingly, the later version of the painting neglects to note the word ``bek
 
 Something which did occur in the half-century between the creation of these two paintings, however, was that the double capitalization of ``Ihr Beiden`` ('you both') enjoyed a brief increase in popularity, as seen in the following [Google Ngram](https://books.google.com/ngrams/graph?content=Ihr+beide%2CIhr+Beide&year_start=1800&year_end=1900&corpus=20&smoothing=3&share=&direct_url=t1%3B%2CIhr%20beide%3B%2Cc0%3B.t1%3B%2CIhr%20Beide%3B%2Cc0) data:
 
-![ngram](/assets/trans-gott-die-drei/images/ngram.png)
+![ngram](/assets/comp-gott-die-drei/images/ngram.png)
 
 Although the lowercase form ``Ihr beiden`` had overtaken the double capitalization form which appears in the later image by the date of its creation (1880), it's not implausible to assume that the author of this version of the painting had learned this double capitalization during their primary education while younger and continued to use it despite its fallen popularity. (The question of whether to capitalize this word still plagues some German speakers today, as evidenced by many questions on forums such as Yahoo! Answers and [Gutefrage.net](https://www.gutefrage.net/frage/hallo-ihr-beiden-oder-hallo-ihr-beiden--gross-oder-klein-)).
 
