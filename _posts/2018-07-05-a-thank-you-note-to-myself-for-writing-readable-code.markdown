@@ -1,6 +1,6 @@
 ---
 layout: "post"
-title: "A Thank You Note to Myself for Writing Readable Code"
+title: "A Thank You Note to My Past Self"
 date: "2018-07-05 14:16"
 ---
 
